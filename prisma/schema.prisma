@@ -1,0 +1,1421 @@
+// ============================================================================
+// PRISMA SCHEMA v3 - Taureau Celtique
+// ============================================================================
+
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../src/generated/prisma"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ==================== ENUMS ====================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum AdminLevel {
+  moderator
+  server
+  global
+}
+
+enum ActionType {
+  message
+  cleanup
+  stats
+  health
+}
+
+enum CommandType {
+  TEXT
+  EMBED
+  ACTION
+  FORM
+}
+
+enum DifficultyLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum QuizDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum QuizSessionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  MIXED
+}
+
+enum ChallengeDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXTREME
+}
+
+enum ProjectType {
+  web
+  mobile
+  game
+  ai
+  opensource
+  other
+}
+
+enum ChannelType {
+  text
+  voice
+}
+
+enum ChallengeType {
+  weekly
+  monthly
+}
+
+enum ChallengeStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ChallengeParticipantStatus {
+  REGISTERED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  WITHDRAWN
+}
+
+enum QuizSessionStatus {
+  scheduled
+  announced
+  running
+  finished
+  cancelled
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  IMPLEMENTED
+}
+
+enum BugStatus {
+  OPEN
+  INVESTIGATING
+  FIXED
+  WONTFIX
+}
+
+enum ModerationAction {
+  ban
+  unban
+  kick
+  mute
+  warn
+  timeout
+}
+
+enum BanLevel {
+  watch
+  warn
+  autoban
+}
+
+enum DetectionType {
+  auto
+  manual_add
+  manual_remove
+}
+
+enum AlertType {
+  system
+  database
+  bot
+  api
+}
+
+enum Severity {
+  info
+  warning
+  error
+  critical
+}
+
+enum MetricType {
+  memory
+  cpu
+  disk
+  database
+  bot_status
+  api_status
+}
+
+enum MonitoringStatus {
+  ok
+  warning
+  critical
+}
+
+enum ChannelAuditAction {
+  create
+  delete
+  update
+  permissions
+}
+
+enum LogType {
+  SUGGESTION
+  BUG
+  MODERATION
+  ERROR
+  ADMIN
+  ALL
+}
+
+enum DocResourceType {
+  ARTICLE
+  TUTORIAL
+  REFERENCE
+  FAQ
+}
+
+enum PermissionTargetType {
+  ROLE
+  MEMBER
+}
+
+// ==================== Auth ====================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String?  @unique
+  name          String?
+  image         String?
+  discordId     String?  @unique @map("discord_id")
+  role          UserRole @default(MEMBER)
+  emailVerified Boolean  @default(false) @map("email_verified")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  sessions Session[]
+  accounts Account[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?   @db.Text
+  idToken               String?   @map("id_token") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("verifications")
+}
+
+// ==================== Guild & Configuration ====================
+
+model GuildConfig {
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId          String    @unique @map("guild_id") @db.VarChar(20)
+  guildName        String    @map("guild_name") @db.VarChar(255)
+  ownerId          String?   @map("owner_id") @db.VarChar(20)
+  memberCount      Int       @default(0) @map("member_count")
+  icon             String?   @db.VarChar(255)
+  isActive         Boolean   @default(true) @map("is_active")
+  prefix           String    @default("!") @db.VarChar(10)
+  welcomeMessage   String?   @map("welcome_message") @db.Text
+  welcomeChannelId String?   @map("welcome_channel_id") @db.VarChar(20)
+  logChannelId     String?   @map("log_channel_id") @db.VarChar(20)
+  modLogChannelId  String?   @map("mod_log_channel_id") @db.VarChar(20)
+  adminRoleId      String?   @map("admin_role_id") @db.VarChar(20)
+  moderatorRoleId  String?   @map("moderator_role_id") @db.VarChar(20)
+  autoRoleId       String?   @map("auto_role_id") @db.VarChar(20)
+  mutedRoleId      String?   @map("muted_role_id") @db.VarChar(20)
+  autoModeration   Boolean   @default(false) @map("auto_moderation")
+  welcomeMessages  Boolean   @default(true) @map("welcome_messages")
+  autoRoles        Boolean   @default(false) @map("auto_roles")
+  logging          Boolean   @default(true)
+  maxWarnings      Int       @default(3) @map("max_warnings")
+  muteDuration     Int       @default(10) @map("mute_duration")
+  banDuration      Int       @default(0) @map("ban_duration")
+  features         Json?
+  settings         Json?
+  permissions      Json?
+  channelsConfig   Json?     @map("channels_config")
+  rolesConfig      Json?     @map("roles_config")
+  totalMessages    Int       @default(0) @map("total_messages")
+  totalCommands    Int       @default(0) @map("total_commands")
+  totalModerations Int       @default(0) @map("total_moderations")
+  lastActivity     DateTime? @map("last_activity") @db.Timestamp(0)
+  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([isActive])
+  @@index([ownerId])
+  @@index([lastActivity])
+  @@index([isActive, lastActivity])
+  @@map("guild_configs")
+}
+
+model BotConfig {
+  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId          String    @unique @map("guild_id") @db.VarChar(50)
+  logChannelId     String?   @map("log_channel_id") @db.VarChar(50)
+  prefix           String    @default("/") @db.VarChar(10)
+  language         String    @default("fr") @db.VarChar(5)
+  antiStudiEnabled Boolean   @default(false) @map("anti_studi_enabled")
+  customSettings   Json?     @map("custom_settings")
+  updatedBy        String?   @map("updated_by") @db.VarChar(50)
+  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@map("bot_config")
+}
+
+model Server {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  discordId   String    @unique @map("discord_id") @db.VarChar(255)
+  name        String    @db.VarChar(255)
+  icon        String?   @db.VarChar(255)
+  memberCount Int       @default(0) @map("member_count")
+  features    Json?
+  active      Boolean   @default(true)
+  joinedAt    DateTime? @map("joined_at") @db.Timestamp(0)
+  createdAt   DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([discordId, active])
+  @@map("servers")
+}
+
+// ==================== Discord Users ====================
+
+model DiscordUser {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  discordId     String   @unique @map("discord_id") @db.VarChar(20)
+  username      String   @db.VarChar(100)
+  discriminator String?  @db.VarChar(4)
+  avatar        String?  @db.VarChar(255)
+  globalName    String?  @map("global_name") @db.VarChar(100)
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.Timestamp(0)
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.Timestamp(0)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([username])
+  @@map("discord_users")
+}
+
+model GuildMember {
+  id                         Int       @id @default(autoincrement())
+  guildId                    String    @map("guild_id")
+  userId                     String    @map("user_id")
+  username                   String    @db.VarChar(100)
+  displayName                String?   @map("display_name") @db.VarChar(100)
+  avatar                     String?   @db.Text
+  roles                      String    @db.Text
+  joinedAt                   DateTime  @map("joined_at")
+  premiumSince               DateTime? @map("premium_since")
+  isBot                      Boolean   @default(false) @map("is_bot")
+  pending                    Boolean   @default(false)
+  communicationDisabledUntil DateTime? @map("communication_disabled_until")
+  lastActiveAt               DateTime? @map("last_active_at")
+  messageCount               Int       @default(0) @map("message_count")
+  voiceMinutes               Int       @default(0) @map("voice_minutes")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+  @@index([userId])
+  @@index([joinedAt(sort: Desc)])
+  @@map("guild_members")
+}
+
+model UserProfile {
+  id                Int       @id @default(autoincrement())
+  discordId         String    @unique @map("discord_id") @db.VarChar(20)
+  username          String?   @db.VarChar(100)
+  githubUsername    String?   @map("github_username") @db.VarChar(100)
+  twitterUsername   String?   @map("twitter_username") @db.VarChar(100)
+  linkedinUrl       String?   @map("linkedin_url") @db.VarChar(255)
+  websiteUrl        String?   @map("website_url") @db.VarChar(255)
+  bio               String?   @db.Text
+  location          String?   @db.VarChar(100)
+  timezone          String?   @db.VarChar(50)
+  preferredLanguage String?   @default("fr") @map("preferred_language") @db.VarChar(10)
+  totalXp           Int       @default(0) @map("total_xp")
+  level             Int       @default(1)
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt         DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([githubUsername])
+  @@index([level])
+  @@map("user_profiles")
+}
+
+model UserSetting {
+  id                   Int       @id @default(autoincrement())
+  discordId            String    @unique @map("discord_id") @db.VarChar(20)
+  notificationsEnabled Boolean?  @default(true) @map("notifications_enabled")
+  dmNotifications      Boolean?  @default(false) @map("dm_notifications")
+  dailyReminders       Boolean?  @default(false) @map("daily_reminders")
+  streakReminders      Boolean?  @default(true) @map("streak_reminders")
+  privacyMode          Boolean?  @default(false) @map("privacy_mode")
+  themePreference      String?   @default("default") @map("theme_preference") @db.VarChar(20)
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@map("user_settings")
+}
+
+model UserBadge {
+  id               Int       @id @default(autoincrement())
+  discordId        String    @map("discord_id") @db.VarChar(20)
+  badgeType        String    @map("badge_type") @db.VarChar(50)
+  badgeName        String    @map("badge_name") @db.VarChar(100)
+  badgeDescription String?   @map("badge_description") @db.Text
+  badgeIcon        String?   @map("badge_icon") @db.VarChar(10)
+  earnedAt         DateTime? @default(now()) @map("earned_at") @db.Timestamp(0)
+  source           String?   @db.VarChar(50)
+
+  @@unique([discordId, badgeType, badgeName])
+  @@index([discordId])
+  @@index([badgeType])
+  @@map("user_badges")
+}
+
+model DashboardMember {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  username  String    @unique @db.VarChar(255)
+  email     String    @unique @db.VarChar(255)
+  password  String    @db.VarChar(255)
+  role      String    @default("member") @db.VarChar(255)
+  discordId String?   @map("discord_id") @db.VarChar(255)
+  isActive  Boolean   @default(true) @map("is_active")
+  lastLogin DateTime? @map("last_login") @db.Timestamp(0)
+  createdAt DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([username, isActive])
+  @@map("dashboard_members")
+}
+
+// ==================== Admins & Moderators ====================
+
+model BotAdmin {
+  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  userId     String     @map("user_id") @db.VarChar(50)
+  username   String     @db.VarChar(100)
+  guildId    String?    @map("guild_id") @db.VarChar(50)
+  adminLevel AdminLevel @default(server) @map("admin_level")
+  addedBy    String     @map("added_by") @db.VarChar(50)
+  addedAt    DateTime   @default(now()) @map("added_at") @db.Timestamp(0)
+
+  @@unique([userId, guildId], map: "unique_admin_guild")
+  @@index([userId])
+  @@index([guildId])
+  @@index([adminLevel])
+  @@map("bot_admins")
+}
+
+model BotModerator {
+  id          Int       @id @default(autoincrement())
+  userId      String    @map("user_id") @db.VarChar(20)
+  guildId     String?   @map("guild_id") @db.VarChar(20)
+  username    String    @db.VarChar(100)
+  permissions String?   @db.Text
+  addedBy     String    @map("added_by") @db.VarChar(20)
+  addedAt     DateTime? @default(now()) @map("added_at") @db.Timestamp(0)
+  isActive    Boolean?  @default(true) @map("is_active")
+
+  @@unique([userId, guildId], map: "user_guild_mod")
+  @@index([guildId])
+  @@index([isActive])
+  @@map("bot_moderators")
+}
+
+model DashboardAccess {
+  id          Int       @id @default(autoincrement())
+  discordId   String    @unique @map("discord_id") @db.VarChar(20)
+  username    String    @db.VarChar(100)
+  isAllowed   Boolean   @default(false) @map("is_allowed")
+  allowedBy   String?   @map("allowed_by") @db.VarChar(20)
+  allowedAt   DateTime? @map("allowed_at")
+  deniedAt    DateTime? @map("denied_at")
+  lastAttempt DateTime? @map("last_attempt")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([isAllowed])
+  @@map("dashboard_access")
+}
+
+// ==================== Commands ====================
+
+model DynamicCommand {
+  id           Int         @id @default(autoincrement())
+  guildId      String      @map("guild_id") @db.VarChar(50)
+  name         String      @db.VarChar(100)
+  description  String      @db.VarChar(255)
+  category     String      @default("custom") @db.VarChar(50)
+  type         CommandType
+  responseData Json        @map("response_data")
+  requiredRole String?     @map("required_role") @db.VarChar(50)
+  cooldown     Int         @default(0)
+  enabled      Boolean     @default(true)
+  createdBy    String      @map("created_by") @db.VarChar(50)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@index([enabled])
+  @@map("dynamic_commands")
+}
+
+model CommandLog {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  commandName   String   @map("command_name") @db.VarChar(100)
+  userId        String   @map("user_id") @db.VarChar(50)
+  guildId       String?  @map("guild_id") @db.VarChar(50)
+  channelId     String?  @map("channel_id") @db.VarChar(50)
+  options       Json?
+  success       Boolean  @default(true)
+  errorMessage  String?  @map("error_message") @db.Text
+  executionTime Int?     @map("execution_time")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([commandName])
+  @@index([userId])
+  @@index([guildId])
+  @@index([createdAt])
+  @@index([success])
+  @@index([guildId, createdAt])
+  @@map("command_logs")
+}
+
+// ==================== Moderation ====================
+
+model ModerationLog {
+  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  action         ModerationAction
+  userId         String           @map("user_id") @db.VarChar(50)
+  moderatorId    String           @map("moderator_id") @db.VarChar(50)
+  guildId        String           @map("guild_id") @db.VarChar(50)
+  reason         String?          @db.Text
+  durationDays   Int?             @map("duration_days")
+  additionalData Json?            @map("additional_data")
+  executedAt     DateTime         @default(now()) @map("executed_at") @db.Timestamp(0)
+
+  @@index([userId])
+  @@index([moderatorId])
+  @@index([guildId])
+  @@index([action])
+  @@index([executedAt])
+  @@map("moderation_logs")
+}
+
+model BannedUser {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId       String    @map("user_id") @db.VarChar(50)
+  username     String    @db.VarChar(100)
+  guildId      String    @map("guild_id") @db.VarChar(50)
+  reason       String?   @db.Text
+  bannedBy     String    @map("banned_by") @db.VarChar(50)
+  executedAt   DateTime? @map("executed_at") @db.Timestamp(0)
+  durationDays Int?      @map("duration_days")
+  expiresAt    DateTime? @map("expires_at") @db.Timestamp(0)
+  unbannedBy   String?   @map("unbanned_by") @db.VarChar(50)
+  unbannedAt   DateTime? @map("unbanned_at") @db.Timestamp(0)
+  unbanReason  String?   @map("unban_reason") @db.Text
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([isActive, expiresAt])
+  @@map("banned_users")
+}
+
+// ==================== Anti-Studi ====================
+
+model StudiConfig {
+  id                 BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId            String    @unique @map("guild_id") @db.VarChar(50)
+  enabled            Boolean   @default(false)
+  autoBan            Boolean   @default(false) @map("auto_ban")
+  detectionThreshold Int       @default(5) @map("detection_threshold")
+  customMessage      String?   @map("custom_message") @db.Text
+  updatedBy          String?   @map("updated_by") @db.VarChar(50)
+  createdAt          DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt          DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@map("studi_config")
+}
+
+model StudiBannedUser {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId      String    @map("user_id") @db.VarChar(50)
+  username    String    @db.VarChar(100)
+  guildId     String    @map("guild_id") @db.VarChar(50)
+  banLevel    BanLevel  @default(warn) @map("ban_level")
+  reason      String?   @db.Text
+  bannedBy    String    @map("banned_by") @db.VarChar(50)
+  bannedAt    DateTime  @default(now()) @map("banned_at") @db.Timestamp(0)
+  unbannedBy  String?   @map("unbanned_by") @db.VarChar(50)
+  unbannedAt  DateTime? @map("unbanned_at") @db.Timestamp(0)
+  unbanReason String?   @map("unban_reason") @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+
+  @@index([userId, guildId])
+  @@index([isActive])
+  @@map("studi_banned_users")
+}
+
+model StudiDetectionLog {
+  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  userId        String        @map("user_id") @db.VarChar(50)
+  username      String        @db.VarChar(100)
+  guildId       String        @map("guild_id") @db.VarChar(50)
+  detectionType DetectionType @map("detection_type")
+  action        String        @db.VarChar(50)
+  details       String?       @db.Text
+  detectedAt    DateTime      @default(now()) @map("detected_at") @db.Timestamp(0)
+
+  @@index([guildId, detectedAt])
+  @@index([userId])
+  @@map("studi_detection_logs")
+}
+
+model StudiWhitelist {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    String    @map("user_id") @db.VarChar(50)
+  username  String    @db.VarChar(100)
+  guildId   String    @map("guild_id") @db.VarChar(50)
+  addedBy   String    @map("added_by") @db.VarChar(50)
+  isActive  Boolean   @default(true) @map("is_active")
+  addedAt   DateTime  @default(now()) @map("added_at") @db.Timestamp(0)
+  updatedAt DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@index([userId, guildId])
+  @@index([isActive])
+  @@map("studi_whitelist")
+}
+
+model StudiLevelHistory {
+  id        Int       @id @default(autoincrement())
+  discordId String    @map("discord_id") @db.VarChar(20)
+  guildId   String    @map("guild_id") @db.VarChar(20)
+  oldLevel  String?   @map("old_level") @db.VarChar(50)
+  newLevel  String    @map("new_level") @db.VarChar(50)
+  changedBy String?   @map("changed_by") @db.VarChar(20)
+  reason    String?   @db.Text
+  changedAt DateTime? @default(now()) @map("changed_at") @db.Timestamp(0)
+
+  @@index([discordId])
+  @@index([guildId])
+  @@map("studi_level_history")
+}
+
+// ==================== Suggestions & Bug Reports ====================
+
+model Suggestion {
+  id            Int              @id @default(autoincrement())
+  guildId       String           @map("guild_id") @db.VarChar(50)
+  userId        String           @map("user_id") @db.VarChar(50)
+  text          String           @db.Text
+  status        SuggestionStatus @default(PENDING)
+  staffResponse String?          @map("staff_response") @db.Text
+  messageId     String?          @map("message_id") @db.VarChar(50)
+  channelId     String?          @map("channel_id") @db.VarChar(50)
+  upvotes       Int              @default(0)
+  downvotes     Int              @default(0)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([status])
+  @@map("suggestions")
+}
+
+model BugReport {
+  id             Int       @id @default(autoincrement())
+  guildId        String    @map("guild_id") @db.VarChar(50)
+  userId         String    @map("user_id") @db.VarChar(50)
+  description    String?   @db.Text
+  commandName    String?   @map("command_name") @db.VarChar(100)
+  commandOptions Json?     @map("command_options")
+  errorMessage   String?   @map("error_message") @db.Text
+  status         BugStatus @default(OPEN)
+  assignedTo     String?   @map("assigned_to") @db.VarChar(50)
+  staffNotes     String?   @map("staff_notes") @db.Text
+  messageId      String?   @map("message_id") @db.VarChar(50)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([status])
+  @@map("bug_reports")
+}
+
+model LogChannel {
+  id        Int     @id @default(autoincrement())
+  guildId   String  @map("guild_id") @db.VarChar(50)
+  type      LogType
+  channelId String  @map("channel_id") @db.VarChar(50)
+  enabled   Boolean @default(true)
+
+  @@unique([guildId, type])
+  @@index([guildId])
+  @@map("log_channels")
+}
+
+// ==================== Channels & Roles ====================
+
+model DiscordRole {
+  id            Int      @id @default(autoincrement())
+  guildId       String   @map("guild_id")
+  roleId        String   @map("role_id")
+  name          String   @db.VarChar(100)
+  color         String   @default("#99AAB5") @db.VarChar(10)
+  position      Int      @default(0)
+  permissions   String   @default("0") @db.VarChar(50)
+  isManaged     Boolean  @default(false) @map("is_managed")
+  isMentionable Boolean  @default(false) @map("is_mentionable")
+  memberCount   Int      @default(0) @map("member_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([guildId, roleId])
+  @@index([guildId, position(sort: Desc)])
+  @@map("discord_roles")
+}
+
+model DiscordChannel {
+  id               Int         @id @default(autoincrement())
+  guildId          String      @map("guild_id")
+  channelId        String      @map("channel_id")
+  name             String      @db.VarChar(100)
+  type             ChannelType @default(text)
+  categoryId       String?     @map("category_id")
+  categoryName     String?     @map("category_name") @db.VarChar(100)
+  position         Int         @default(0)
+  topic            String?     @db.Text
+  nsfw             Boolean     @default(false)
+  rateLimitPerUser Int?        @map("rate_limit_per_user")
+  bitrate          Int?
+  userLimit        Int?        @map("user_limit")
+  messageCount     Int         @default(0) @map("message_count")
+  memberCount      Int         @default(0) @map("member_count")
+  lastMessageAt    DateTime?   @map("last_message_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  permissions ChannelPermission[]
+
+  @@unique([guildId, channelId])
+  @@index([guildId, type])
+  @@map("discord_channels")
+}
+
+model ChannelPermission {
+  id         Int                  @id @default(autoincrement())
+  channelId  Int                  @map("channel_id")
+  targetType PermissionTargetType @map("target_type")
+  targetId   String               @map("target_id")
+  allow      String               @default("0") @db.VarChar(50)
+  deny       String               @default("0") @db.VarChar(50)
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+
+  channel DiscordChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, targetType, targetId])
+  @@index([channelId])
+  @@map("channel_permissions")
+}
+
+model PrivateChannel {
+  id               BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId          String      @map("guild_id") @db.VarChar(20)
+  channelDiscordId String?     @map("channel_discord_id") @db.VarChar(20)
+  channelName      String      @map("channel_name") @db.VarChar(100)
+  channelType      ChannelType @default(text) @map("channel_type")
+  categoryId       String?     @map("category_id") @db.VarChar(20)
+  maxMembers       Int?        @map("max_members")
+  permissions      Json?
+  createdBy        String      @map("created_by") @db.VarChar(20)
+  reason           String?     @db.VarChar(500)
+  isActive         Boolean     @default(true) @map("is_active")
+  deletedAt        DateTime?   @map("deleted_at") @db.Timestamp(0)
+  deletedBy        String?     @map("deleted_by") @db.VarChar(20)
+  deletionReason   String?     @map("deletion_reason") @db.VarChar(500)
+  createdAt        DateTime?   @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime?   @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([isActive])
+  @@map("private_channels")
+}
+
+model ChannelLog {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId   String   @map("guild_id") @db.VarChar(20)
+  channelId String?  @map("channel_id") @db.VarChar(20)
+  action    String   @db.VarChar(100)
+  userId    String   @map("user_id") @db.VarChar(20)
+  data      Json?
+  reason    String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([channelId])
+  @@map("channel_logs")
+}
+
+model TemporaryRole {
+  id              BigInt    @id @default(autoincrement())
+  userId          String    @map("user_id") @db.VarChar(20)
+  guildId         String    @map("guild_id") @db.VarChar(20)
+  roleId          String    @map("role_id") @db.VarChar(20)
+  reason          String?   @db.VarChar(255)
+  source          String?   @db.VarChar(50)
+  grantedBy       String?   @map("granted_by") @db.VarChar(20)
+  grantedAt       DateTime? @default(now()) @map("granted_at") @db.Timestamp(0)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamp(0)
+  removedAt       DateTime? @map("removed_at") @db.Timestamp(0)
+  isActive        Boolean?  @default(true) @map("is_active")
+  roleName        String?   @map("role_name") @db.VarChar(100)
+  removedBy       String?   @map("removed_by") @db.VarChar(20)
+  removalReason   String?   @map("removal_reason") @db.VarChar(500)
+  extensionReason String?   @map("extension_reason") @db.VarChar(500)
+  extendedBy      String?   @map("extended_by") @db.VarChar(20)
+  extendedAt      DateTime? @map("extended_at") @db.Timestamp(0)
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([userId, guildId])
+  @@index([expiresAt, isActive])
+  @@index([source])
+  @@index([guildId, isActive])
+  @@map("temporary_roles")
+}
+
+// ==================== Quiz System ====================
+
+model QuizTheme {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String    @unique @db.VarChar(255)
+  slug        String    @unique @db.VarChar(255)
+  description String?   @db.Text
+  color       String?   @default("#0099FF") @db.VarChar(7)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@map("quiz_themes")
+}
+
+model QuizQuestion {
+  id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  themeId       BigInt?        @map("theme_id") @db.UnsignedBigInt
+  question      String         @db.Text
+  description   String?        @db.Text
+  difficulty    QuizDifficulty @default(medium)
+  allowMultiple Boolean        @default(false) @map("allow_multiple")
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime?      @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime?      @map("updated_at") @db.Timestamp(0)
+
+  @@index([themeId])
+  @@map("quiz_questions")
+}
+
+model QuizAnswer {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  questionId BigInt    @map("question_id") @db.UnsignedBigInt
+  label      String    @db.VarChar(1)
+  text       String    @db.VarChar(255)
+  isCorrect  Boolean   @default(false) @map("is_correct")
+  createdAt  DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt  DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@unique([questionId, label])
+  @@index([questionId])
+  @@map("quiz_answers")
+}
+
+model QuizConfig {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId           String    @unique @map("guild_id") @db.VarChar(20)
+  announceChannelId String?   @map("announce_channel_id") @db.VarChar(20)
+  quizChannelId     String?   @map("quiz_channel_id") @db.VarChar(20)
+  mentionEveryone   Boolean   @default(false) @map("mention_everyone")
+  defaultThemes     Json?     @map("default_themes")
+  schedule          Json?
+  createdAt         DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt         DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@map("quiz_configs")
+}
+
+model QuizRewardsConfig {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId      String    @unique @map("guild_id") @db.VarChar(20)
+  winnerRoleId String?   @map("winner_role_id") @db.VarChar(20)
+  durationDays Int       @default(7) @map("duration_days")
+  message      String?   @db.Text
+  isActive     Boolean   @default(false) @map("is_active")
+  createdAt    DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@map("quiz_rewards_configs")
+}
+
+model QuizSession {
+  id            BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId       String            @map("guild_id") @db.VarChar(20)
+  channelId     String            @map("channel_id") @db.VarChar(20)
+  themeSlug     String?           @map("theme_slug") @db.VarChar(255)
+  questionCount Int               @default(10) @map("question_count")
+  startAt       DateTime?         @map("start_at") @db.Timestamp(0)
+  announceAt    DateTime?         @map("announce_at") @db.Timestamp(0)
+  endAt         DateTime?         @map("end_at") @db.Timestamp(0)
+  status        QuizSessionStatus @default(scheduled)
+  createdAt     DateTime?         @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime?         @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([status])
+  @@map("quiz_sessions")
+}
+
+model QuizSessionQuestion {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  sessionId     BigInt    @map("session_id") @db.UnsignedBigInt
+  questionId    BigInt    @map("question_id") @db.UnsignedBigInt
+  position      Int
+  correctLabels Json      @map("correct_labels")
+  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId])
+  @@map("quiz_session_questions")
+}
+
+model QuizParticipant {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  sessionId     BigInt    @map("session_id") @db.UnsignedBigInt
+  userId        String    @map("user_id") @db.VarChar(20)
+  userDiscordId String    @map("user_discord_id") @db.VarChar(20)
+  username      String?   @db.VarChar(255)
+  score         Int       @default(0)
+  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@unique([sessionId, userDiscordId])
+  @@index([sessionId])
+  @@index([userDiscordId])
+  @@map("quiz_participants")
+}
+
+model QuizResponse {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  sessionId         BigInt    @map("session_id") @db.UnsignedBigInt
+  sessionQuestionId BigInt    @map("session_question_id") @db.UnsignedBigInt
+  userDiscordId     String    @map("user_discord_id") @db.VarChar(20)
+  labels            String    @db.VarChar(255)
+  points            Int       @default(0)
+  answerTimeMs      Int?      @map("answer_time_ms")
+  createdAt         DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt         DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@unique([sessionQuestionId, userDiscordId])
+  @@index([sessionId])
+  @@index([userDiscordId])
+  @@map("quiz_responses")
+}
+
+model QuizChallenge {
+  id              Int            @id @default(autoincrement())
+  guildId         String         @map("guild_id") @db.VarChar(20)
+  title           String         @db.VarChar(255)
+  description     String?        @db.Text
+  theme           String?        @db.VarChar(50)
+  difficulty      QuizDifficulty @default(medium)
+  minParticipants Int            @default(2) @map("min_participants")
+  maxParticipants Int            @default(50) @map("max_participants")
+  rewardXp        Int            @default(100) @map("reward_xp")
+  isActive        Boolean?       @default(true) @map("is_active")
+  createdBy       String         @map("created_by") @db.VarChar(20)
+  createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([isActive])
+  @@map("quiz_challenges")
+}
+
+// ==================== Challenges ====================
+
+model ChallengeConfig {
+  id                  BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId             String    @unique @map("guild_id") @db.VarChar(20)
+  weeklyTitle         String?   @map("weekly_title") @db.VarChar(255)
+  monthlyTitle        String?   @map("monthly_title") @db.VarChar(255)
+  announceChannelId   String?   @map("announce_channel_id") @db.VarChar(20)
+  autoAnnounceWeekly  Boolean   @default(true) @map("auto_announce_weekly")
+  autoAnnounceMonthly Boolean   @default(true) @map("auto_announce_monthly")
+  createdAt           DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt           DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@map("challenge_configs")
+}
+
+model ChallengeSubmission {
+  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId       String        @map("guild_id") @db.VarChar(20)
+  userDiscordId String        @map("user_discord_id") @db.VarChar(20)
+  type          ChallengeType
+  periodStart   DateTime      @map("period_start") @db.Date
+  periodEnd     DateTime      @map("period_end") @db.Date
+  submittedAt   DateTime      @default(now()) @map("submitted_at") @db.Timestamp(0)
+  metadata      Json?
+  createdAt     DateTime?     @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime?     @map("updated_at") @db.Timestamp(0)
+
+  @@unique([guildId, userDiscordId, type, periodStart], map: "uniq_submission")
+  @@index([guildId])
+  @@index([type])
+  @@map("challenge_submissions")
+}
+
+model ChallengeVote {
+  id                  BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  guildId             String        @map("guild_id") @db.VarChar(20)
+  type                ChallengeType
+  periodStart         DateTime      @map("period_start") @db.Date
+  voterDiscordId      String        @map("voter_discord_id") @db.VarChar(20)
+  targetUserDiscordId String        @map("target_user_discord_id") @db.VarChar(20)
+  votedAt             DateTime      @default(now()) @map("voted_at") @db.Timestamp(0)
+  createdAt           DateTime?     @map("created_at") @db.Timestamp(0)
+  updatedAt           DateTime?     @map("updated_at") @db.Timestamp(0)
+
+  @@unique([guildId, type, periodStart, voterDiscordId], map: "uniq_challenge_vote")
+  @@index([guildId])
+  @@index([type])
+  @@map("challenge_votes")
+}
+
+// ==================== Projects ====================
+
+model Project {
+  id             BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  name           String      @db.VarChar(100)
+  description    String      @db.Text
+  projectType    ProjectType @default(other) @map("project_type")
+  isPrivate      Boolean     @default(false) @map("is_private")
+  isActive       Boolean     @default(true) @map("is_active")
+  guildId        String      @map("guild_id") @db.VarChar(50)
+  categoryId     String?     @map("category_id") @db.VarChar(50)
+  textChannelId  String?     @map("text_channel_id") @db.VarChar(50)
+  voiceChannelId String?     @map("voice_channel_id") @db.VarChar(50)
+  roleId         String?     @map("role_id") @db.VarChar(50)
+  createdBy      String      @map("created_by") @db.VarChar(50)
+  createdAt      DateTime?   @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?   @map("updated_at") @db.Timestamp(0)
+  subgroups      Subgroup[]
+
+  @@index([guildId])
+  @@index([isActive])
+  @@map("projects")
+}
+
+model Subgroup {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String           @db.VarChar(100)
+  description String?          @db.Text
+  projectId   BigInt           @map("project_id") @db.UnsignedBigInt
+  guildId     String           @map("guild_id") @db.VarChar(50)
+  isActive    Boolean          @default(true) @map("is_active")
+  createdBy   String           @map("created_by") @db.VarChar(50)
+  createdAt   DateTime?        @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime?        @map("updated_at") @db.Timestamp(0)
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members     SubgroupMember[]
+
+  @@index([projectId])
+  @@index([guildId])
+  @@map("subgroups")
+}
+
+model SubgroupMember {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId     String   @map("user_id") @db.VarChar(50)
+  username   String   @db.VarChar(100)
+  subgroupId BigInt   @map("subgroup_id") @db.UnsignedBigInt
+  addedBy    String   @map("added_by") @db.VarChar(50)
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamp(0)
+  subgroup   Subgroup @relation(fields: [subgroupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subgroupId], map: "unique_user_subgroup")
+  @@index([userId])
+  @@index([subgroupId])
+  @@map("subgroup_members")
+}
+
+// ==================== Documentation ====================
+
+model DocSuperCategory {
+  id          BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String        @unique @db.VarChar(100)
+  description String?       @db.Text
+  icon        String?       @db.VarChar(10)
+  color       String        @default("#0099FF") @db.VarChar(7)
+  sortOrder   Int           @default(0) @map("sort_order")
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime?     @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime?     @map("updated_at") @db.Timestamp(0)
+  categories  DocCategory[]
+
+  @@map("doc_super_categories")
+}
+
+model DocCategory {
+  id              BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  superCategoryId BigInt?           @map("super_category_id") @db.UnsignedBigInt
+  name            String            @db.VarChar(100)
+  description     String?           @db.Text
+  icon            String?           @db.VarChar(10)
+  color           String            @default("#0099FF") @db.VarChar(7)
+  sortOrder       Int               @default(0) @map("sort_order")
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime?         @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime?         @map("updated_at") @db.Timestamp(0)
+  superCategory   DocSuperCategory? @relation(fields: [superCategoryId], references: [id], onDelete: Cascade)
+  resources       DocResource[]
+
+  @@index([sortOrder])
+  @@index([isActive])
+  @@index([superCategoryId])
+  @@map("doc_categories")
+}
+
+model DocResource {
+  id              BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  name            String          @db.VarChar(200)
+  description     String?         @db.Text
+  url             String          @db.Text
+  language        String          @db.VarChar(100)
+  categoryId      BigInt?         @map("category_id") @db.UnsignedBigInt
+  tags            Json?
+  difficultyLevel DifficultyLevel @default(beginner) @map("difficulty_level")
+  searchUrl       String?         @map("search_url") @db.Text
+  tutorialUrl     String?         @map("tutorial_url") @db.Text
+  popularity      Int             @default(0)
+  isActive        Boolean         @default(true) @map("is_active")
+  viewCount       Int             @default(0) @map("view_count")
+  addedBy         String?         @map("added_by") @db.VarChar(50)
+  createdAt       DateTime?       @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime?       @map("updated_at") @db.Timestamp(0)
+  category        DocCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([categoryId])
+  @@map("doc_resources")
+}
+
+// ==================== SQL Clinic ====================
+
+model SqlClinicDataset {
+  id          BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  slug        String          @unique @db.VarChar(255)
+  name        String          @db.VarChar(255)
+  description String?         @db.Text
+  meta        Json?
+  schemaSql   String?         @map("schema_sql") @db.LongText
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime?       @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime?       @map("updated_at") @db.Timestamp(0)
+  tasks       SqlClinicTask[]
+
+  @@map("sql_clinic_datasets")
+}
+
+model SqlClinicTask {
+  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  datasetId      BigInt           @map("dataset_id") @db.UnsignedBigInt
+  slug           String           @db.VarChar(255)
+  title          String           @db.VarChar(255)
+  description    String?          @db.Text
+  statement      String           @db.Text
+  expectedSql    String           @map("expected_sql") @db.Text
+  expectedResult Json             @map("expected_result")
+  points         Int              @default(1)
+  createdAt      DateTime?        @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?        @map("updated_at") @db.Timestamp(0)
+  dataset        SqlClinicDataset @relation(fields: [datasetId], references: [id])
+
+  @@unique([datasetId, slug])
+  @@index([datasetId])
+  @@map("sql_clinic_tasks")
+}
+
+model SqlClinicSubmission {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  taskId         BigInt    @map("task_id") @db.UnsignedBigInt
+  userDiscordId  String    @map("user_discord_id") @db.VarChar(20)
+  submittedSql   String    @map("submitted_sql") @db.Text
+  resultSnapshot Json?     @map("result_snapshot")
+  isCorrect      Boolean   @default(false) @map("is_correct")
+  awardedPoints  Int       @default(0) @map("awarded_points")
+  submittedAt    DateTime  @default(now()) @map("submitted_at") @db.Timestamp(0)
+  createdAt      DateTime? @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime? @map("updated_at") @db.Timestamp(0)
+
+  @@unique([taskId, userDiscordId])
+  @@index([taskId])
+  @@index([userDiscordId])
+  @@map("sql_clinic_submissions")
+}
+
+model SqlClinicChallenge {
+  id               Int            @id @default(autoincrement())
+  title            String         @db.VarChar(255)
+  description      String         @db.Text
+  sqlQuery         String         @map("sql_query") @db.Text
+  expectedResult   String?        @map("expected_result") @db.LongText
+  difficulty       QuizDifficulty @default(medium)
+  points           Int?           @default(50)
+  timeLimitMinutes Int?           @default(60) @map("time_limit_minutes")
+  isActive         Boolean?       @default(true) @map("is_active")
+  createdAt        DateTime?      @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([isActive])
+  @@map("sql_clinic_challenges")
+}
+
+// ==================== Monitoring & System ====================
+
+model SystemAlert {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  alertType  AlertType @map("alert_type")
+  severity   Severity
+  title      String    @db.VarChar(255)
+  message    String    @db.Text
+  data       Json?
+  isResolved Boolean   @default(false) @map("is_resolved")
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamp(0)
+  resolvedBy String?   @map("resolved_by") @db.VarChar(20)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([alertType])
+  @@index([severity])
+  @@index([isResolved])
+  @@map("system_alerts")
+}
+
+model SystemMonitoring {
+  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  metricType        MetricType       @map("metric_type")
+  value             Decimal          @db.Decimal(10, 2)
+  unit              String           @db.VarChar(10)
+  thresholdWarning  Decimal?         @map("threshold_warning") @db.Decimal(10, 2)
+  thresholdCritical Decimal?         @map("threshold_critical") @db.Decimal(10, 2)
+  status            MonitoringStatus @default(ok)
+  additionalData    Json?            @map("additional_data")
+  recordedAt        DateTime         @default(now()) @map("recorded_at") @db.Timestamp(0)
+
+  @@index([metricType])
+  @@index([status])
+  @@map("system_monitoring")
+}
+
+model ScheduledTask {
+  id             BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  name           String     @db.VarChar(255)
+  guildId        String     @map("guild_id") @db.VarChar(50)
+  cronExpression String     @map("cron_expression") @db.VarChar(100)
+  actionType     ActionType @map("action_type")
+  actionData     Json?      @map("action_data")
+  isActive       Boolean    @default(true) @map("is_active")
+  nextRun        DateTime?  @map("next_run") @db.Timestamp(0)
+  lastRun        DateTime?  @map("last_run") @db.Timestamp(0)
+  runCount       Int        @default(0) @map("run_count")
+  lastError      String?    @map("last_error") @db.Text
+  createdBy      String     @map("created_by") @db.VarChar(50)
+  createdAt      DateTime?  @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?  @map("updated_at") @db.Timestamp(0)
+
+  @@unique([name, guildId], map: "unique_task_guild")
+  @@index([guildId])
+  @@index([isActive])
+  @@map("scheduled_tasks")
+}
+
+model Reminder {
+  id        Int       @id @default(autoincrement())
+  guildId   String    @map("guild_id") @db.VarChar(50)
+  userId    String    @map("user_id") @db.VarChar(50)
+  channelId String    @map("channel_id") @db.VarChar(50)
+  message   String    @db.Text
+  remindAt  DateTime  @map("remind_at") @db.Timestamp(0)
+  repeat    String?   @db.VarChar(20)
+  status    String    @default("pending") @db.VarChar(20)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  sentAt    DateTime? @map("sent_at") @db.Timestamp(0)
+
+  @@index([guildId])
+  @@index([remindAt])
+  @@index([status])
+  @@map("reminders")
+}
+
+// ==================== Dashboard ====================
+
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  userId       String   @map("user_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([resourceType])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id")
+  type      String
+  title     String
+  message   String    @db.Text
+  link      String?
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  readAt    DateTime? @map("read_at")
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+// ==================== GitHub ====================
+
+model GithubStreak {
+  id             Int       @id @default(autoincrement())
+  discordId      String    @map("discord_id") @db.VarChar(20)
+  githubUsername String    @map("github_username") @db.VarChar(100)
+  streakDays     Int       @default(0) @map("streak_days")
+  lastCommitDate DateTime? @map("last_commit_date") @db.Date
+  totalRepos     Int       @default(0) @map("total_repos")
+  followers      Int       @default(0)
+  bestStreak     Int       @default(0) @map("best_streak")
+  totalCommits   Int       @default(0) @map("total_commits")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@unique([discordId, githubUsername])
+  @@index([streakDays])
+  @@index([discordId])
+  @@map("github_streaks")
+}
+
+// ==================== Job Offers ====================
+
+model JobOfferConfig {
+  id               Int      @id @default(autoincrement())
+  guildId          String   @unique @map("guild_id") @db.VarChar(20)
+  channelId        String?  @map("channel_id") @db.VarChar(20)
+  isActive         Boolean  @default(false) @map("is_active")
+  keywords         String   @default("developpeur junior,dev junior,developpeur web junior,developer junior") @db.Text
+  departments      String?  @db.VarChar(500)
+  contractTypes    String   @default("CDI,CDD,MIS") @map("contract_types") @db.VarChar(200)
+  includeRemote    Boolean  @default(true) @map("include_remote")
+  pollInterval     Int      @default(30) @map("poll_interval")
+  maxOffersPerPoll Int      @default(5) @map("max_offers_per_poll")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@map("job_offer_configs")
+}
+
+model JobOfferPosted {
+  id           Int      @id @default(autoincrement())
+  guildId      String   @map("guild_id") @db.VarChar(20)
+  offerId      String   @map("offer_id") @db.VarChar(50)
+  title        String   @db.VarChar(500)
+  company      String?  @db.VarChar(255)
+  location     String?  @db.VarChar(255)
+  contractType String?  @map("contract_type") @db.VarChar(50)
+  messageId    String?  @map("message_id") @db.VarChar(20)
+  postedAt     DateTime @default(now()) @map("posted_at") @db.Timestamp(0)
+
+  @@unique([guildId, offerId], map: "unique_guild_offer")
+  @@index([guildId])
+  @@index([offerId])
+  @@index([postedAt])
+  @@map("job_offers_posted")
+}
