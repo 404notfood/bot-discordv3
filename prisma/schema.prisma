@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 // ==================== ENUMS ====================
@@ -269,7 +269,7 @@ model Verification {
 // ==================== Guild & Configuration ====================
 
 model GuildConfig {
-  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id               BigInt    @id @default(autoincrement())
   guildId          String    @unique @map("guild_id") @db.VarChar(20)
   guildName        String    @map("guild_name") @db.VarChar(255)
   ownerId          String?   @map("owner_id") @db.VarChar(20)
@@ -300,9 +300,9 @@ model GuildConfig {
   totalMessages    Int       @default(0) @map("total_messages")
   totalCommands    Int       @default(0) @map("total_commands")
   totalModerations Int       @default(0) @map("total_moderations")
-  lastActivity     DateTime? @map("last_activity") @db.Timestamp(0)
-  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+  lastActivity     DateTime? @map("last_activity") @db.Timestamptz
+  createdAt        DateTime? @map("created_at") @db.Timestamptz
+  updatedAt        DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([isActive])
@@ -313,7 +313,7 @@ model GuildConfig {
 }
 
 model BotConfig {
-  id               BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id               BigInt    @id @default(autoincrement())
   guildId          String    @unique @map("guild_id") @db.VarChar(50)
   logChannelId     String?   @map("log_channel_id") @db.VarChar(50)
   prefix           String    @default("/") @db.VarChar(10)
@@ -321,24 +321,24 @@ model BotConfig {
   antiStudiEnabled Boolean   @default(false) @map("anti_studi_enabled")
   customSettings   Json?     @map("custom_settings")
   updatedBy        String?   @map("updated_by") @db.VarChar(50)
-  createdAt        DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt        DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt        DateTime? @map("created_at") @db.Timestamptz
+  updatedAt        DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@map("bot_config")
 }
 
 model Server {
-  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt    @id @default(autoincrement())
   discordId   String    @unique @map("discord_id") @db.VarChar(255)
   name        String    @db.VarChar(255)
   icon        String?   @db.VarChar(255)
   memberCount Int       @default(0) @map("member_count")
   features    Json?
   active      Boolean   @default(true)
-  joinedAt    DateTime? @map("joined_at") @db.Timestamp(0)
-  createdAt   DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
+  joinedAt    DateTime? @map("joined_at") @db.Timestamptz
+  createdAt   DateTime? @map("created_at") @db.Timestamptz
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([discordId, active])
   @@map("servers")
@@ -347,15 +347,15 @@ model Server {
 // ==================== Discord Users ====================
 
 model DiscordUser {
-  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  id            BigInt   @id @default(autoincrement())
   discordId     String   @unique @map("discord_id") @db.VarChar(20)
   username      String   @db.VarChar(100)
   discriminator String?  @db.VarChar(4)
   avatar        String?  @db.VarChar(255)
   globalName    String?  @map("global_name") @db.VarChar(100)
-  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.Timestamp(0)
-  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.Timestamp(0)
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at") @db.Timestamptz
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([username])
   @@map("discord_users")
@@ -401,8 +401,8 @@ model UserProfile {
   preferredLanguage String?   @default("fr") @map("preferred_language") @db.VarChar(10)
   totalXp           Int       @default(0) @map("total_xp")
   level             Int       @default(1)
-  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt         DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([githubUsername])
   @@index([level])
@@ -418,8 +418,8 @@ model UserSetting {
   streakReminders      Boolean?  @default(true) @map("streak_reminders")
   privacyMode          Boolean?  @default(false) @map("privacy_mode")
   themePreference      String?   @default("default") @map("theme_preference") @db.VarChar(20)
-  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("user_settings")
 }
@@ -431,7 +431,7 @@ model UserBadge {
   badgeName        String    @map("badge_name") @db.VarChar(100)
   badgeDescription String?   @map("badge_description") @db.Text
   badgeIcon        String?   @map("badge_icon") @db.VarChar(10)
-  earnedAt         DateTime? @default(now()) @map("earned_at") @db.Timestamp(0)
+  earnedAt         DateTime? @default(now()) @map("earned_at") @db.Timestamptz
   source           String?   @db.VarChar(50)
 
   @@unique([discordId, badgeType, badgeName])
@@ -441,16 +441,16 @@ model UserBadge {
 }
 
 model DashboardMember {
-  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id        BigInt    @id @default(autoincrement())
   username  String    @unique @db.VarChar(255)
   email     String    @unique @db.VarChar(255)
   password  String    @db.VarChar(255)
   role      String    @default("member") @db.VarChar(255)
   discordId String?   @map("discord_id") @db.VarChar(255)
   isActive  Boolean   @default(true) @map("is_active")
-  lastLogin DateTime? @map("last_login") @db.Timestamp(0)
-  createdAt DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt DateTime? @map("updated_at") @db.Timestamp(0)
+  lastLogin DateTime? @map("last_login") @db.Timestamptz
+  createdAt DateTime? @map("created_at") @db.Timestamptz
+  updatedAt DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([username, isActive])
   @@map("dashboard_members")
@@ -459,13 +459,13 @@ model DashboardMember {
 // ==================== Admins & Moderators ====================
 
 model BotAdmin {
-  id         BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  id         BigInt     @id @default(autoincrement())
   userId     String     @map("user_id") @db.VarChar(50)
   username   String     @db.VarChar(100)
   guildId    String?    @map("guild_id") @db.VarChar(50)
   adminLevel AdminLevel @default(server) @map("admin_level")
   addedBy    String     @map("added_by") @db.VarChar(50)
-  addedAt    DateTime   @default(now()) @map("added_at") @db.Timestamp(0)
+  addedAt    DateTime   @default(now()) @map("added_at") @db.Timestamptz
 
   @@unique([userId, guildId], map: "unique_admin_guild")
   @@index([userId])
@@ -481,7 +481,7 @@ model BotModerator {
   username    String    @db.VarChar(100)
   permissions String?   @db.Text
   addedBy     String    @map("added_by") @db.VarChar(20)
-  addedAt     DateTime? @default(now()) @map("added_at") @db.Timestamp(0)
+  addedAt     DateTime? @default(now()) @map("added_at") @db.Timestamptz
   isActive    Boolean?  @default(true) @map("is_active")
 
   @@unique([userId, guildId], map: "user_guild_mod")
@@ -520,8 +520,8 @@ model DynamicCommand {
   cooldown     Int         @default(0)
   enabled      Boolean     @default(true)
   createdBy    String      @map("created_by") @db.VarChar(50)
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz
 
   @@unique([guildId, name])
   @@index([guildId])
@@ -530,7 +530,7 @@ model DynamicCommand {
 }
 
 model CommandLog {
-  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  id            BigInt   @id @default(autoincrement())
   commandName   String   @map("command_name") @db.VarChar(100)
   userId        String   @map("user_id") @db.VarChar(50)
   guildId       String?  @map("guild_id") @db.VarChar(50)
@@ -539,7 +539,7 @@ model CommandLog {
   success       Boolean  @default(true)
   errorMessage  String?  @map("error_message") @db.Text
   executionTime Int?     @map("execution_time")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([commandName])
   @@index([userId])
@@ -553,7 +553,7 @@ model CommandLog {
 // ==================== Moderation ====================
 
 model ModerationLog {
-  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  id             BigInt           @id @default(autoincrement())
   action         ModerationAction
   userId         String           @map("user_id") @db.VarChar(50)
   moderatorId    String           @map("moderator_id") @db.VarChar(50)
@@ -561,7 +561,7 @@ model ModerationLog {
   reason         String?          @db.Text
   durationDays   Int?             @map("duration_days")
   additionalData Json?            @map("additional_data")
-  executedAt     DateTime         @default(now()) @map("executed_at") @db.Timestamp(0)
+  executedAt     DateTime         @default(now()) @map("executed_at") @db.Timestamptz
 
   @@index([userId])
   @@index([moderatorId])
@@ -572,21 +572,21 @@ model ModerationLog {
 }
 
 model BannedUser {
-  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id           BigInt    @id @default(autoincrement())
   userId       String    @map("user_id") @db.VarChar(50)
   username     String    @db.VarChar(100)
   guildId      String    @map("guild_id") @db.VarChar(50)
   reason       String?   @db.Text
   bannedBy     String    @map("banned_by") @db.VarChar(50)
-  executedAt   DateTime? @map("executed_at") @db.Timestamp(0)
+  executedAt   DateTime? @map("executed_at") @db.Timestamptz
   durationDays Int?      @map("duration_days")
-  expiresAt    DateTime? @map("expires_at") @db.Timestamp(0)
+  expiresAt    DateTime? @map("expires_at") @db.Timestamptz
   unbannedBy   String?   @map("unbanned_by") @db.VarChar(50)
-  unbannedAt   DateTime? @map("unbanned_at") @db.Timestamp(0)
+  unbannedAt   DateTime? @map("unbanned_at") @db.Timestamptz
   unbanReason  String?   @map("unban_reason") @db.Text
   isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt    DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt    DateTime? @map("created_at") @db.Timestamptz
+  updatedAt    DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([isActive, expiresAt])
   @@map("banned_users")
@@ -595,30 +595,30 @@ model BannedUser {
 // ==================== Anti-Studi ====================
 
 model StudiConfig {
-  id                 BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id                 BigInt    @id @default(autoincrement())
   guildId            String    @unique @map("guild_id") @db.VarChar(50)
   enabled            Boolean   @default(false)
   autoBan            Boolean   @default(false) @map("auto_ban")
   detectionThreshold Int       @default(5) @map("detection_threshold")
   customMessage      String?   @map("custom_message") @db.Text
   updatedBy          String?   @map("updated_by") @db.VarChar(50)
-  createdAt          DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt          DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt          DateTime? @map("created_at") @db.Timestamptz
+  updatedAt          DateTime? @map("updated_at") @db.Timestamptz
 
   @@map("studi_config")
 }
 
 model StudiBannedUser {
-  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt    @id @default(autoincrement())
   userId      String    @map("user_id") @db.VarChar(50)
   username    String    @db.VarChar(100)
   guildId     String    @map("guild_id") @db.VarChar(50)
   banLevel    BanLevel  @default(warn) @map("ban_level")
   reason      String?   @db.Text
   bannedBy    String    @map("banned_by") @db.VarChar(50)
-  bannedAt    DateTime  @default(now()) @map("banned_at") @db.Timestamp(0)
+  bannedAt    DateTime  @default(now()) @map("banned_at") @db.Timestamptz
   unbannedBy  String?   @map("unbanned_by") @db.VarChar(50)
-  unbannedAt  DateTime? @map("unbanned_at") @db.Timestamp(0)
+  unbannedAt  DateTime? @map("unbanned_at") @db.Timestamptz
   unbanReason String?   @map("unban_reason") @db.Text
   isActive    Boolean   @default(true) @map("is_active")
 
@@ -628,14 +628,14 @@ model StudiBannedUser {
 }
 
 model StudiDetectionLog {
-  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  id            BigInt        @id @default(autoincrement())
   userId        String        @map("user_id") @db.VarChar(50)
   username      String        @db.VarChar(100)
   guildId       String        @map("guild_id") @db.VarChar(50)
   detectionType DetectionType @map("detection_type")
   action        String        @db.VarChar(50)
   details       String?       @db.Text
-  detectedAt    DateTime      @default(now()) @map("detected_at") @db.Timestamp(0)
+  detectedAt    DateTime      @default(now()) @map("detected_at") @db.Timestamptz
 
   @@index([guildId, detectedAt])
   @@index([userId])
@@ -643,14 +643,14 @@ model StudiDetectionLog {
 }
 
 model StudiWhitelist {
-  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id        BigInt    @id @default(autoincrement())
   userId    String    @map("user_id") @db.VarChar(50)
   username  String    @db.VarChar(100)
   guildId   String    @map("guild_id") @db.VarChar(50)
   addedBy   String    @map("added_by") @db.VarChar(50)
   isActive  Boolean   @default(true) @map("is_active")
-  addedAt   DateTime  @default(now()) @map("added_at") @db.Timestamp(0)
-  updatedAt DateTime? @map("updated_at") @db.Timestamp(0)
+  addedAt   DateTime  @default(now()) @map("added_at") @db.Timestamptz
+  updatedAt DateTime? @map("updated_at") @db.Timestamptz
 
   @@index([userId, guildId])
   @@index([isActive])
@@ -665,7 +665,7 @@ model StudiLevelHistory {
   newLevel  String    @map("new_level") @db.VarChar(50)
   changedBy String?   @map("changed_by") @db.VarChar(20)
   reason    String?   @db.Text
-  changedAt DateTime? @default(now()) @map("changed_at") @db.Timestamp(0)
+  changedAt DateTime? @default(now()) @map("changed_at") @db.Timestamptz
 
   @@index([discordId])
   @@index([guildId])
@@ -685,8 +685,8 @@ model Suggestion {
   channelId     String?          @map("channel_id") @db.VarChar(50)
   upvotes       Int              @default(0)
   downvotes     Int              @default(0)
-  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([status])
@@ -705,8 +705,8 @@ model BugReport {
   assignedTo     String?   @map("assigned_to") @db.VarChar(50)
   staffNotes     String?   @map("staff_notes") @db.Text
   messageId      String?   @map("message_id") @db.VarChar(50)
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  resolvedAt     DateTime? @map("resolved_at") @db.Timestamp(0)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([status])
@@ -791,7 +791,7 @@ model ChannelPermission {
 }
 
 model PrivateChannel {
-  id               BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  id               BigInt      @id @default(autoincrement())
   guildId          String      @map("guild_id") @db.VarChar(20)
   channelDiscordId String?     @map("channel_discord_id") @db.VarChar(20)
   channelName      String      @map("channel_name") @db.VarChar(100)
@@ -802,11 +802,11 @@ model PrivateChannel {
   createdBy        String      @map("created_by") @db.VarChar(20)
   reason           String?     @db.VarChar(500)
   isActive         Boolean     @default(true) @map("is_active")
-  deletedAt        DateTime?   @map("deleted_at") @db.Timestamp(0)
+  deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz
   deletedBy        String?     @map("deleted_by") @db.VarChar(20)
   deletionReason   String?     @map("deletion_reason") @db.VarChar(500)
-  createdAt        DateTime?   @map("created_at") @db.Timestamp(0)
-  updatedAt        DateTime?   @map("updated_at") @db.Timestamp(0)
+  createdAt        DateTime?   @map("created_at") @db.Timestamptz
+  updatedAt        DateTime?   @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([isActive])
@@ -814,14 +814,14 @@ model PrivateChannel {
 }
 
 model ChannelLog {
-  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  id        BigInt   @id @default(autoincrement())
   guildId   String   @map("guild_id") @db.VarChar(20)
   channelId String?  @map("channel_id") @db.VarChar(20)
   action    String   @db.VarChar(100)
   userId    String   @map("user_id") @db.VarChar(20)
   data      Json?
   reason    String?  @db.VarChar(500)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([channelId])
@@ -836,18 +836,18 @@ model TemporaryRole {
   reason          String?   @db.VarChar(255)
   source          String?   @db.VarChar(50)
   grantedBy       String?   @map("granted_by") @db.VarChar(20)
-  grantedAt       DateTime? @default(now()) @map("granted_at") @db.Timestamp(0)
-  expiresAt       DateTime  @map("expires_at") @db.Timestamp(0)
-  removedAt       DateTime? @map("removed_at") @db.Timestamp(0)
+  grantedAt       DateTime? @default(now()) @map("granted_at") @db.Timestamptz
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz
+  removedAt       DateTime? @map("removed_at") @db.Timestamptz
   isActive        Boolean?  @default(true) @map("is_active")
   roleName        String?   @map("role_name") @db.VarChar(100)
   removedBy       String?   @map("removed_by") @db.VarChar(20)
   removalReason   String?   @map("removal_reason") @db.VarChar(500)
   extensionReason String?   @map("extension_reason") @db.VarChar(500)
   extendedBy      String?   @map("extended_by") @db.VarChar(20)
-  extendedAt      DateTime? @map("extended_at") @db.Timestamp(0)
-  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  extendedAt      DateTime? @map("extended_at") @db.Timestamptz
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([userId, guildId])
   @@index([expiresAt, isActive])
@@ -859,41 +859,41 @@ model TemporaryRole {
 // ==================== Quiz System ====================
 
 model QuizTheme {
-  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt    @id @default(autoincrement())
   name        String    @unique @db.VarChar(255)
   slug        String    @unique @db.VarChar(255)
   description String?   @db.Text
   color       String?   @default("#0099FF") @db.VarChar(7)
   isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt   DateTime? @map("created_at") @db.Timestamptz
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz
 
   @@map("quiz_themes")
 }
 
 model QuizQuestion {
-  id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
-  themeId       BigInt?        @map("theme_id") @db.UnsignedBigInt
+  id            BigInt         @id @default(autoincrement())
+  themeId       BigInt?        @map("theme_id")
   question      String         @db.Text
   description   String?        @db.Text
   difficulty    QuizDifficulty @default(medium)
   allowMultiple Boolean        @default(false) @map("allow_multiple")
   isActive      Boolean        @default(true) @map("is_active")
-  createdAt     DateTime?      @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime?      @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime?      @map("created_at") @db.Timestamptz
+  updatedAt     DateTime?      @map("updated_at") @db.Timestamptz
 
   @@index([themeId])
   @@map("quiz_questions")
 }
 
 model QuizAnswer {
-  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  questionId BigInt    @map("question_id") @db.UnsignedBigInt
+  id         BigInt    @id @default(autoincrement())
+  questionId BigInt    @map("question_id")
   label      String    @db.VarChar(1)
   text       String    @db.VarChar(255)
   isCorrect  Boolean   @default(false) @map("is_correct")
-  createdAt  DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt  DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt  DateTime? @map("created_at") @db.Timestamptz
+  updatedAt  DateTime? @map("updated_at") @db.Timestamptz
 
   @@unique([questionId, label])
   @@index([questionId])
@@ -901,44 +901,44 @@ model QuizAnswer {
 }
 
 model QuizConfig {
-  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id                BigInt    @id @default(autoincrement())
   guildId           String    @unique @map("guild_id") @db.VarChar(20)
   announceChannelId String?   @map("announce_channel_id") @db.VarChar(20)
   quizChannelId     String?   @map("quiz_channel_id") @db.VarChar(20)
   mentionEveryone   Boolean   @default(false) @map("mention_everyone")
   defaultThemes     Json?     @map("default_themes")
   schedule          Json?
-  createdAt         DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt         DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt         DateTime? @map("created_at") @db.Timestamptz
+  updatedAt         DateTime? @map("updated_at") @db.Timestamptz
 
   @@map("quiz_configs")
 }
 
 model QuizRewardsConfig {
-  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id           BigInt    @id @default(autoincrement())
   guildId      String    @unique @map("guild_id") @db.VarChar(20)
   winnerRoleId String?   @map("winner_role_id") @db.VarChar(20)
   durationDays Int       @default(7) @map("duration_days")
   message      String?   @db.Text
   isActive     Boolean   @default(false) @map("is_active")
-  createdAt    DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt    DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt    DateTime? @map("created_at") @db.Timestamptz
+  updatedAt    DateTime? @map("updated_at") @db.Timestamptz
 
   @@map("quiz_rewards_configs")
 }
 
 model QuizSession {
-  id            BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  id            BigInt            @id @default(autoincrement())
   guildId       String            @map("guild_id") @db.VarChar(20)
   channelId     String            @map("channel_id") @db.VarChar(20)
   themeSlug     String?           @map("theme_slug") @db.VarChar(255)
   questionCount Int               @default(10) @map("question_count")
-  startAt       DateTime?         @map("start_at") @db.Timestamp(0)
-  announceAt    DateTime?         @map("announce_at") @db.Timestamp(0)
-  endAt         DateTime?         @map("end_at") @db.Timestamp(0)
+  startAt       DateTime?         @map("start_at") @db.Timestamptz
+  announceAt    DateTime?         @map("announce_at") @db.Timestamptz
+  endAt         DateTime?         @map("end_at") @db.Timestamptz
   status        QuizSessionStatus @default(scheduled)
-  createdAt     DateTime?         @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime?         @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime?         @map("created_at") @db.Timestamptz
+  updatedAt     DateTime?         @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([status])
@@ -946,13 +946,13 @@ model QuizSession {
 }
 
 model QuizSessionQuestion {
-  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  sessionId     BigInt    @map("session_id") @db.UnsignedBigInt
-  questionId    BigInt    @map("question_id") @db.UnsignedBigInt
+  id            BigInt    @id @default(autoincrement())
+  sessionId     BigInt    @map("session_id")
+  questionId    BigInt    @map("question_id")
   position      Int
   correctLabels Json      @map("correct_labels")
-  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime? @map("created_at") @db.Timestamptz
+  updatedAt     DateTime? @map("updated_at") @db.Timestamptz
 
   @@unique([sessionId, questionId])
   @@index([sessionId])
@@ -960,14 +960,14 @@ model QuizSessionQuestion {
 }
 
 model QuizParticipant {
-  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  sessionId     BigInt    @map("session_id") @db.UnsignedBigInt
+  id            BigInt    @id @default(autoincrement())
+  sessionId     BigInt    @map("session_id")
   userId        String    @map("user_id") @db.VarChar(20)
   userDiscordId String    @map("user_discord_id") @db.VarChar(20)
   username      String?   @db.VarChar(255)
   score         Int       @default(0)
-  createdAt     DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime? @map("created_at") @db.Timestamptz
+  updatedAt     DateTime? @map("updated_at") @db.Timestamptz
 
   @@unique([sessionId, userDiscordId])
   @@index([sessionId])
@@ -976,15 +976,15 @@ model QuizParticipant {
 }
 
 model QuizResponse {
-  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  sessionId         BigInt    @map("session_id") @db.UnsignedBigInt
-  sessionQuestionId BigInt    @map("session_question_id") @db.UnsignedBigInt
+  id                BigInt    @id @default(autoincrement())
+  sessionId         BigInt    @map("session_id")
+  sessionQuestionId BigInt    @map("session_question_id")
   userDiscordId     String    @map("user_discord_id") @db.VarChar(20)
   labels            String    @db.VarChar(255)
   points            Int       @default(0)
   answerTimeMs      Int?      @map("answer_time_ms")
-  createdAt         DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt         DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt         DateTime? @map("created_at") @db.Timestamptz
+  updatedAt         DateTime? @map("updated_at") @db.Timestamptz
 
   @@unique([sessionQuestionId, userDiscordId])
   @@index([sessionId])
@@ -1004,8 +1004,8 @@ model QuizChallenge {
   rewardXp        Int            @default(100) @map("reward_xp")
   isActive        Boolean?       @default(true) @map("is_active")
   createdBy       String         @map("created_by") @db.VarChar(20)
-  createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([isActive])
@@ -1015,30 +1015,30 @@ model QuizChallenge {
 // ==================== Challenges ====================
 
 model ChallengeConfig {
-  id                  BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id                  BigInt    @id @default(autoincrement())
   guildId             String    @unique @map("guild_id") @db.VarChar(20)
   weeklyTitle         String?   @map("weekly_title") @db.VarChar(255)
   monthlyTitle        String?   @map("monthly_title") @db.VarChar(255)
   announceChannelId   String?   @map("announce_channel_id") @db.VarChar(20)
   autoAnnounceWeekly  Boolean   @default(true) @map("auto_announce_weekly")
   autoAnnounceMonthly Boolean   @default(true) @map("auto_announce_monthly")
-  createdAt           DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt           DateTime? @map("updated_at") @db.Timestamp(0)
+  createdAt           DateTime? @map("created_at") @db.Timestamptz
+  updatedAt           DateTime? @map("updated_at") @db.Timestamptz
 
   @@map("challenge_configs")
 }
 
 model ChallengeSubmission {
-  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  id            BigInt        @id @default(autoincrement())
   guildId       String        @map("guild_id") @db.VarChar(20)
   userDiscordId String        @map("user_discord_id") @db.VarChar(20)
   type          ChallengeType
   periodStart   DateTime      @map("period_start") @db.Date
   periodEnd     DateTime      @map("period_end") @db.Date
-  submittedAt   DateTime      @default(now()) @map("submitted_at") @db.Timestamp(0)
+  submittedAt   DateTime      @default(now()) @map("submitted_at") @db.Timestamptz
   metadata      Json?
-  createdAt     DateTime?     @map("created_at") @db.Timestamp(0)
-  updatedAt     DateTime?     @map("updated_at") @db.Timestamp(0)
+  createdAt     DateTime?     @map("created_at") @db.Timestamptz
+  updatedAt     DateTime?     @map("updated_at") @db.Timestamptz
 
   @@unique([guildId, userDiscordId, type, periodStart], map: "uniq_submission")
   @@index([guildId])
@@ -1047,15 +1047,15 @@ model ChallengeSubmission {
 }
 
 model ChallengeVote {
-  id                  BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  id                  BigInt        @id @default(autoincrement())
   guildId             String        @map("guild_id") @db.VarChar(20)
   type                ChallengeType
   periodStart         DateTime      @map("period_start") @db.Date
   voterDiscordId      String        @map("voter_discord_id") @db.VarChar(20)
   targetUserDiscordId String        @map("target_user_discord_id") @db.VarChar(20)
-  votedAt             DateTime      @default(now()) @map("voted_at") @db.Timestamp(0)
-  createdAt           DateTime?     @map("created_at") @db.Timestamp(0)
-  updatedAt           DateTime?     @map("updated_at") @db.Timestamp(0)
+  votedAt             DateTime      @default(now()) @map("voted_at") @db.Timestamptz
+  createdAt           DateTime?     @map("created_at") @db.Timestamptz
+  updatedAt           DateTime?     @map("updated_at") @db.Timestamptz
 
   @@unique([guildId, type, periodStart, voterDiscordId], map: "uniq_challenge_vote")
   @@index([guildId])
@@ -1066,7 +1066,7 @@ model ChallengeVote {
 // ==================== Projects ====================
 
 model Project {
-  id             BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  id             BigInt      @id @default(autoincrement())
   name           String      @db.VarChar(100)
   description    String      @db.Text
   projectType    ProjectType @default(other) @map("project_type")
@@ -1078,8 +1078,8 @@ model Project {
   voiceChannelId String?     @map("voice_channel_id") @db.VarChar(50)
   roleId         String?     @map("role_id") @db.VarChar(50)
   createdBy      String      @map("created_by") @db.VarChar(50)
-  createdAt      DateTime?   @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime?   @map("updated_at") @db.Timestamp(0)
+  createdAt      DateTime?   @map("created_at") @db.Timestamptz
+  updatedAt      DateTime?   @map("updated_at") @db.Timestamptz
   subgroups      Subgroup[]
 
   @@index([guildId])
@@ -1088,15 +1088,15 @@ model Project {
 }
 
 model Subgroup {
-  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt           @id @default(autoincrement())
   name        String           @db.VarChar(100)
   description String?          @db.Text
-  projectId   BigInt           @map("project_id") @db.UnsignedBigInt
+  projectId   BigInt           @map("project_id")
   guildId     String           @map("guild_id") @db.VarChar(50)
   isActive    Boolean          @default(true) @map("is_active")
   createdBy   String           @map("created_by") @db.VarChar(50)
-  createdAt   DateTime?        @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime?        @map("updated_at") @db.Timestamp(0)
+  createdAt   DateTime?        @map("created_at") @db.Timestamptz
+  updatedAt   DateTime?        @map("updated_at") @db.Timestamptz
   project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   members     SubgroupMember[]
 
@@ -1106,12 +1106,12 @@ model Subgroup {
 }
 
 model SubgroupMember {
-  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  id         BigInt   @id @default(autoincrement())
   userId     String   @map("user_id") @db.VarChar(50)
   username   String   @db.VarChar(100)
-  subgroupId BigInt   @map("subgroup_id") @db.UnsignedBigInt
+  subgroupId BigInt   @map("subgroup_id")
   addedBy    String   @map("added_by") @db.VarChar(50)
-  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamp(0)
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz
   subgroup   Subgroup @relation(fields: [subgroupId], references: [id], onDelete: Cascade)
 
   @@unique([userId, subgroupId], map: "unique_user_subgroup")
@@ -1123,31 +1123,31 @@ model SubgroupMember {
 // ==================== Documentation ====================
 
 model DocSuperCategory {
-  id          BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt        @id @default(autoincrement())
   name        String        @unique @db.VarChar(100)
   description String?       @db.Text
   icon        String?       @db.VarChar(10)
   color       String        @default("#0099FF") @db.VarChar(7)
   sortOrder   Int           @default(0) @map("sort_order")
   isActive    Boolean       @default(true) @map("is_active")
-  createdAt   DateTime?     @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime?     @map("updated_at") @db.Timestamp(0)
+  createdAt   DateTime?     @map("created_at") @db.Timestamptz
+  updatedAt   DateTime?     @map("updated_at") @db.Timestamptz
   categories  DocCategory[]
 
   @@map("doc_super_categories")
 }
 
 model DocCategory {
-  id              BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  superCategoryId BigInt?           @map("super_category_id") @db.UnsignedBigInt
+  id              BigInt            @id @default(autoincrement())
+  superCategoryId BigInt?           @map("super_category_id")
   name            String            @db.VarChar(100)
   description     String?           @db.Text
   icon            String?           @db.VarChar(10)
   color           String            @default("#0099FF") @db.VarChar(7)
   sortOrder       Int               @default(0) @map("sort_order")
   isActive        Boolean           @default(true) @map("is_active")
-  createdAt       DateTime?         @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime?         @map("updated_at") @db.Timestamp(0)
+  createdAt       DateTime?         @map("created_at") @db.Timestamptz
+  updatedAt       DateTime?         @map("updated_at") @db.Timestamptz
   superCategory   DocSuperCategory? @relation(fields: [superCategoryId], references: [id], onDelete: Cascade)
   resources       DocResource[]
 
@@ -1158,12 +1158,12 @@ model DocCategory {
 }
 
 model DocResource {
-  id              BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  id              BigInt          @id @default(autoincrement())
   name            String          @db.VarChar(200)
   description     String?         @db.Text
   url             String          @db.Text
   language        String          @db.VarChar(100)
-  categoryId      BigInt?         @map("category_id") @db.UnsignedBigInt
+  categoryId      BigInt?         @map("category_id")
   tags            Json?
   difficultyLevel DifficultyLevel @default(beginner) @map("difficulty_level")
   searchUrl       String?         @map("search_url") @db.Text
@@ -1172,8 +1172,8 @@ model DocResource {
   isActive        Boolean         @default(true) @map("is_active")
   viewCount       Int             @default(0) @map("view_count")
   addedBy         String?         @map("added_by") @db.VarChar(50)
-  createdAt       DateTime?       @map("created_at") @db.Timestamp(0)
-  updatedAt       DateTime?       @map("updated_at") @db.Timestamp(0)
+  createdAt       DateTime?       @map("created_at") @db.Timestamptz
+  updatedAt       DateTime?       @map("updated_at") @db.Timestamptz
   category        DocCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
@@ -1183,23 +1183,23 @@ model DocResource {
 // ==================== SQL Clinic ====================
 
 model SqlClinicDataset {
-  id          BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  id          BigInt          @id @default(autoincrement())
   slug        String          @unique @db.VarChar(255)
   name        String          @db.VarChar(255)
   description String?         @db.Text
   meta        Json?
-  schemaSql   String?         @map("schema_sql") @db.LongText
+  schemaSql   String?         @map("schema_sql") @db.Text
   isActive    Boolean         @default(true) @map("is_active")
-  createdAt   DateTime?       @map("created_at") @db.Timestamp(0)
-  updatedAt   DateTime?       @map("updated_at") @db.Timestamp(0)
+  createdAt   DateTime?       @map("created_at") @db.Timestamptz
+  updatedAt   DateTime?       @map("updated_at") @db.Timestamptz
   tasks       SqlClinicTask[]
 
   @@map("sql_clinic_datasets")
 }
 
 model SqlClinicTask {
-  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
-  datasetId      BigInt           @map("dataset_id") @db.UnsignedBigInt
+  id             BigInt           @id @default(autoincrement())
+  datasetId      BigInt           @map("dataset_id")
   slug           String           @db.VarChar(255)
   title          String           @db.VarChar(255)
   description    String?          @db.Text
@@ -1207,8 +1207,8 @@ model SqlClinicTask {
   expectedSql    String           @map("expected_sql") @db.Text
   expectedResult Json             @map("expected_result")
   points         Int              @default(1)
-  createdAt      DateTime?        @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime?        @map("updated_at") @db.Timestamp(0)
+  createdAt      DateTime?        @map("created_at") @db.Timestamptz
+  updatedAt      DateTime?        @map("updated_at") @db.Timestamptz
   dataset        SqlClinicDataset @relation(fields: [datasetId], references: [id])
 
   @@unique([datasetId, slug])
@@ -1217,16 +1217,16 @@ model SqlClinicTask {
 }
 
 model SqlClinicSubmission {
-  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  taskId         BigInt    @map("task_id") @db.UnsignedBigInt
+  id             BigInt    @id @default(autoincrement())
+  taskId         BigInt    @map("task_id")
   userDiscordId  String    @map("user_discord_id") @db.VarChar(20)
   submittedSql   String    @map("submitted_sql") @db.Text
   resultSnapshot Json?     @map("result_snapshot")
   isCorrect      Boolean   @default(false) @map("is_correct")
   awardedPoints  Int       @default(0) @map("awarded_points")
-  submittedAt    DateTime  @default(now()) @map("submitted_at") @db.Timestamp(0)
-  createdAt      DateTime? @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime? @map("updated_at") @db.Timestamp(0)
+  submittedAt    DateTime  @default(now()) @map("submitted_at") @db.Timestamptz
+  createdAt      DateTime? @map("created_at") @db.Timestamptz
+  updatedAt      DateTime? @map("updated_at") @db.Timestamptz
 
   @@unique([taskId, userDiscordId])
   @@index([taskId])
@@ -1239,13 +1239,13 @@ model SqlClinicChallenge {
   title            String         @db.VarChar(255)
   description      String         @db.Text
   sqlQuery         String         @map("sql_query") @db.Text
-  expectedResult   String?        @map("expected_result") @db.LongText
+  expectedResult   String?        @map("expected_result") @db.Text
   difficulty       QuizDifficulty @default(medium)
   points           Int?           @default(50)
   timeLimitMinutes Int?           @default(60) @map("time_limit_minutes")
   isActive         Boolean?       @default(true) @map("is_active")
-  createdAt        DateTime?      @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt        DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt        DateTime?      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([isActive])
   @@map("sql_clinic_challenges")
@@ -1254,16 +1254,16 @@ model SqlClinicChallenge {
 // ==================== Monitoring & System ====================
 
 model SystemAlert {
-  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  id         BigInt    @id @default(autoincrement())
   alertType  AlertType @map("alert_type")
   severity   Severity
   title      String    @db.VarChar(255)
   message    String    @db.Text
   data       Json?
   isResolved Boolean   @default(false) @map("is_resolved")
-  resolvedAt DateTime? @map("resolved_at") @db.Timestamp(0)
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz
   resolvedBy String?   @map("resolved_by") @db.VarChar(20)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([alertType])
   @@index([severity])
@@ -1272,7 +1272,7 @@ model SystemAlert {
 }
 
 model SystemMonitoring {
-  id                BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  id                BigInt           @id @default(autoincrement())
   metricType        MetricType       @map("metric_type")
   value             Decimal          @db.Decimal(10, 2)
   unit              String           @db.VarChar(10)
@@ -1280,7 +1280,7 @@ model SystemMonitoring {
   thresholdCritical Decimal?         @map("threshold_critical") @db.Decimal(10, 2)
   status            MonitoringStatus @default(ok)
   additionalData    Json?            @map("additional_data")
-  recordedAt        DateTime         @default(now()) @map("recorded_at") @db.Timestamp(0)
+  recordedAt        DateTime         @default(now()) @map("recorded_at") @db.Timestamptz
 
   @@index([metricType])
   @@index([status])
@@ -1288,20 +1288,20 @@ model SystemMonitoring {
 }
 
 model ScheduledTask {
-  id             BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  id             BigInt     @id @default(autoincrement())
   name           String     @db.VarChar(255)
   guildId        String     @map("guild_id") @db.VarChar(50)
   cronExpression String     @map("cron_expression") @db.VarChar(100)
   actionType     ActionType @map("action_type")
   actionData     Json?      @map("action_data")
   isActive       Boolean    @default(true) @map("is_active")
-  nextRun        DateTime?  @map("next_run") @db.Timestamp(0)
-  lastRun        DateTime?  @map("last_run") @db.Timestamp(0)
+  nextRun        DateTime?  @map("next_run") @db.Timestamptz
+  lastRun        DateTime?  @map("last_run") @db.Timestamptz
   runCount       Int        @default(0) @map("run_count")
   lastError      String?    @map("last_error") @db.Text
   createdBy      String     @map("created_by") @db.VarChar(50)
-  createdAt      DateTime?  @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime?  @map("updated_at") @db.Timestamp(0)
+  createdAt      DateTime?  @map("created_at") @db.Timestamptz
+  updatedAt      DateTime?  @map("updated_at") @db.Timestamptz
 
   @@unique([name, guildId], map: "unique_task_guild")
   @@index([guildId])
@@ -1315,11 +1315,11 @@ model Reminder {
   userId    String    @map("user_id") @db.VarChar(50)
   channelId String    @map("channel_id") @db.VarChar(50)
   message   String    @db.Text
-  remindAt  DateTime  @map("remind_at") @db.Timestamp(0)
+  remindAt  DateTime  @map("remind_at") @db.Timestamptz
   repeat    String?   @db.VarChar(20)
   status    String    @default("pending") @db.VarChar(20)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
-  sentAt    DateTime? @map("sent_at") @db.Timestamp(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  sentAt    DateTime? @map("sent_at") @db.Timestamptz
 
   @@index([guildId])
   @@index([remindAt])
@@ -1374,8 +1374,8 @@ model GithubStreak {
   followers      Int       @default(0)
   bestStreak     Int       @default(0) @map("best_streak")
   totalCommits   Int       @default(0) @map("total_commits")
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@unique([discordId, githubUsername])
   @@index([streakDays])
@@ -1396,8 +1396,8 @@ model JobOfferConfig {
   includeRemote    Boolean  @default(true) @map("include_remote")
   pollInterval     Int      @default(30) @map("poll_interval")
   maxOffersPerPoll Int      @default(5) @map("max_offers_per_poll")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("job_offer_configs")
 }
@@ -1411,7 +1411,7 @@ model JobOfferPosted {
   location     String?  @db.VarChar(255)
   contractType String?  @map("contract_type") @db.VarChar(50)
   messageId    String?  @map("message_id") @db.VarChar(20)
-  postedAt     DateTime @default(now()) @map("posted_at") @db.Timestamp(0)
+  postedAt     DateTime @default(now()) @map("posted_at") @db.Timestamptz
 
   @@unique([guildId, offerId], map: "unique_guild_offer")
   @@index([guildId])

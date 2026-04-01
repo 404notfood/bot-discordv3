@@ -1,68 +1,16 @@
 import { PrismaClient } from '../generated/prisma/client';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { log } from './logger';
 
 /**
- * Gestionnaire de base de donnees singleton utilisant Prisma avec l'adaptateur MariaDB.
- * Fournit les operations CRUD courantes et la gestion du cycle de vie de la connexion.
+ * Gestionnaire de base de donnees singleton utilisant Prisma avec PostgreSQL.
  */
 class DatabaseManager {
   private static instance: DatabaseManager;
   private prisma: PrismaClient;
-  private adapter: PrismaMariaDb;
   private isConnected = false;
 
   private constructor() {
-    // Extraire les informations de connexion depuis DATABASE_URL
-    // Format: mysql://user:password@host:port/database
-    const dbUrl = process.env.DATABASE_URL || '';
-    const parsed = this.parseDatabaseUrl(dbUrl);
-
-    // Creer l'adaptateur MariaDB natif
-    this.adapter = new PrismaMariaDb({
-      host: parsed.host,
-      port: parsed.port,
-      user: parsed.user,
-      password: parsed.password,
-      database: parsed.database,
-      connectionLimit: 10,
-    });
-
-    // Creer le client Prisma avec l'adaptateur
-    this.prisma = new PrismaClient({
-      adapter: this.adapter,
-    });
-  }
-
-  /**
-   * Parse une URL de base de donnees MySQL/MariaDB.
-   */
-  private parseDatabaseUrl(url: string): {
-    host: string;
-    port: number;
-    user: string;
-    password: string;
-    database: string;
-  } {
-    try {
-      const parsed = new URL(url);
-      return {
-        host: parsed.hostname || 'localhost',
-        port: parseInt(parsed.port || '3306', 10),
-        user: decodeURIComponent(parsed.username || 'root'),
-        password: decodeURIComponent(parsed.password || ''),
-        database: parsed.pathname.replace('/', '') || 'Taureau_Celtique_db',
-      };
-    } catch {
-      log.warn('Impossible de parser DATABASE_URL, utilisation des valeurs par defaut');
-      return {
-        host: 'localhost',
-        port: 3306,
-        user: 'root',
-        password: '',
-        database: 'Taureau_Celtique_db',
-      };
-    }
+    this.prisma = new PrismaClient();
   }
 
   /**
@@ -90,13 +38,13 @@ class DatabaseManager {
     if (this.isConnected) return true;
 
     try {
-      log.info('Initialisation de la base de donnees (Prisma)...');
+      log.info('Initialisation de la base de donnees (Prisma + PostgreSQL)...');
 
       // Test de connexion
       await this.prisma.$queryRawUnsafe('SELECT 1');
 
       this.isConnected = true;
-      log.info('Base de donnees connectee (Prisma)');
+      log.info('Base de donnees connectee (PostgreSQL)');
       return true;
     } catch (error) {
       const err = error as Error;
@@ -146,7 +94,6 @@ class DatabaseManager {
 
   /**
    * Enregistre l'execution d'une commande dans les logs.
-   * Les erreurs sont silencieuses pour ne pas bloquer l'execution de la commande.
    */
   async logCommand(commandData: {
     commandName: string;
@@ -181,7 +128,6 @@ class DatabaseManager {
         { executionTime: commandData.executionTime },
       );
     } catch (error) {
-      // Erreur silencieuse pour ne pas bloquer la commande
       log.database('logCommand', false, { error });
     }
   }
@@ -268,7 +214,7 @@ class DatabaseManager {
     try {
       await this.prisma.$disconnect();
       this.isConnected = false;
-      log.info('Connexion base de donnees fermee (Prisma)');
+      log.info('Connexion base de donnees fermee');
     } catch (error) {
       log.error('Erreur lors de la fermeture de la connexion Prisma', { error });
     }
