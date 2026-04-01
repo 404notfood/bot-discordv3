@@ -715,6 +715,32 @@ const messageCreateEvent: BotEvent = {
     // Ignore bot messages
     if (message.author.bot) return;
 
+    // ------------------------------------------------------------------
+    // Retrait du role "Nouvel utilisateur" au premier message
+    // ------------------------------------------------------------------
+    if (message.guild && message.member) {
+      try {
+        const guildConfig = await db.client.guildConfig.findUnique({
+          where: { guildId: message.guild.id },
+          select: { autoRoles: true, autoRoleId: true },
+        });
+
+        if (guildConfig?.autoRoles && guildConfig.autoRoleId) {
+          const hasNewRole = message.member.roles.cache.has(guildConfig.autoRoleId);
+          if (hasNewRole) {
+            await message.member.roles.remove(
+              guildConfig.autoRoleId,
+              'Premier message - retrait du role Nouvel utilisateur'
+            );
+            log.service('Welcome', `Role Nouvel utilisateur retire de ${message.author.tag} (premier message)`);
+          }
+        }
+      } catch (err) {
+        // Pas critique, on log et on continue
+        log.debug('Erreur retrait role nouvel utilisateur', { error: err });
+      }
+    }
+
     const content = message.content.trim();
 
     // Fast filtering: only process relevant messages
