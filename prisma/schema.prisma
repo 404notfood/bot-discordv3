@@ -1390,7 +1390,7 @@ model JobOfferConfig {
   guildId          String   @unique @map("guild_id") @db.VarChar(20)
   channelId        String?  @map("channel_id") @db.VarChar(20)
   isActive         Boolean  @default(false) @map("is_active")
-  keywords         String   @default("developpeur junior,dev junior,developpeur web junior,developer junior") @db.Text
+  keywords         String   @default("developpeur junior,dev junior,developpeur web junior,developer junior") @db.VarChar(2000)
   departments      String?  @db.VarChar(500)
   contractTypes    String   @default("CDI,CDD,MIS") @map("contract_types") @db.VarChar(200)
   includeRemote    Boolean  @default(true) @map("include_remote")
