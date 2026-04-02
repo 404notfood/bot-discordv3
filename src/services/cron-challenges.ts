@@ -29,6 +29,11 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Retourne un Date a minuit UTC (pour Prisma @db.Date) */
+function toDateOnly(d: Date): Date {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
 function typeLabel(type: string): string {
   return type === 'weekly' ? 'Hebdomadaire' : 'Mensuel';
 }
@@ -47,10 +52,9 @@ function roleNameForType(type: string): string {
 
 async function getActiveChallenge(guildId: string, type: string) {
   const { start, end } = type === 'weekly' ? getWeeklyBounds() : getMonthlyBounds();
-  const periodStart = toDateStr(start);
 
   const plan = await db.client.challengePlan.findFirst({
-    where: { guildId, type: type as ChallengeType, periodStart },
+    where: { guildId, type: type as ChallengeType, periodStart: toDateOnly(start) },
   });
 
   if (plan) {
@@ -217,7 +221,7 @@ async function closeChallenge(
     where: {
       guildId,
       type: type as ChallengeType,
-      periodStart: periodStart,
+      periodStart: new Date(periodStart + 'T00:00:00Z'),
     },
   });
 
@@ -258,7 +262,7 @@ async function closeChallenge(
   if (!channel) return;
 
   const challenge = await db.client.challengePlan.findFirst({
-    where: { guildId, type: type as ChallengeType, periodStart },
+    where: { guildId, type: type as ChallengeType, periodStart: new Date(periodStart + 'T00:00:00Z') },
   });
   const challengeTitle = challenge?.title || (type === 'weekly' ? cfg.weeklyTitle : cfg.monthlyTitle) || 'Challenge';
 
@@ -442,7 +446,7 @@ export class ChallengeSchedulerService {
   private async hadChallenge(guildId: string, type: string, periodStart: string): Promise<boolean> {
     // Check if there's a plan
     const plan = await db.client.challengePlan.findFirst({
-      where: { guildId, type: type as ChallengeType, periodStart },
+      where: { guildId, type: type as ChallengeType, periodStart: new Date(periodStart + 'T00:00:00Z') },
     });
     if (plan) return true;
 

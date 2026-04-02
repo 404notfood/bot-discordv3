@@ -54,11 +54,17 @@ function getBoundsForType(type: string) {
   return type === 'weekly' ? getWeeklyBounds() : getMonthlyBounds();
 }
 
+/** Retourne une string YYYY-MM-DD (pour les raw queries) */
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/** Retourne un Date a minuit UTC (pour Prisma @db.Date) */
+function toDateOnly(d: Date): Date {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 }
 
 function typeLabel(type: string): string {
@@ -81,14 +87,13 @@ async function getActiveChallenge(guildId: string, type: string): Promise<{
   source: 'plan' | 'config' | 'none';
 }> {
   const { start, end } = getBoundsForType(type);
-  const periodStart = toDateStr(start);
 
   // Chercher d'abord dans les plans
   const plan = await db.client.challengePlan.findFirst({
     where: {
       guildId,
       type: type as any,
-      periodStart: periodStart,
+      periodStart: toDateOnly(start),
     },
   });
 
@@ -162,21 +167,18 @@ async function handlePlanifier(interaction: ChatInputCommandInteraction) {
       end = bounds.end;
     }
 
-    const periodStart = toDateStr(start);
-    const periodEnd = toDateStr(end);
-
     await db.client.challengePlan.upsert({
       where: {
         guildId_type_periodStart: {
           guildId,
           type: type as any,
-          periodStart,
+          periodStart: toDateOnly(start),
         },
       },
       update: {
         title: titre,
         description,
-        periodEnd,
+        periodEnd: toDateOnly(end),
         updatedAt: new Date(),
       },
       create: {
@@ -184,8 +186,8 @@ async function handlePlanifier(interaction: ChatInputCommandInteraction) {
         type: type as any,
         title: titre,
         description,
-        periodStart,
-        periodEnd,
+        periodStart: toDateOnly(start),
+        periodEnd: toDateOnly(end),
         createdBy: interaction.user.id,
       },
     });
@@ -225,7 +227,7 @@ async function handlePlanning(interaction: ChatInputCommandInteraction) {
   const plans = await db.client.challengePlan.findMany({
     where: {
       guildId,
-      periodEnd: { gte: toDateStr(now) },
+      periodEnd: { gte: toDateOnly(now) },
     },
     orderBy: { periodStart: 'asc' },
     take: 20,
@@ -298,7 +300,7 @@ async function handleConfig(interaction: ChatInputCommandInteraction) {
         guildId_type_periodStart: {
           guildId,
           type: type as any,
-          periodStart: toDateStr(start),
+          periodStart: toDateOnly(start),
         },
       },
       update: { title: titre, updatedAt: new Date() },
@@ -306,8 +308,8 @@ async function handleConfig(interaction: ChatInputCommandInteraction) {
         guildId,
         type: type as any,
         title: titre,
-        periodStart: toDateStr(start),
-        periodEnd: toDateStr(end),
+        periodStart: toDateOnly(start),
+        periodEnd: toDateOnly(end),
         createdBy: interaction.user.id,
       },
     });
@@ -341,7 +343,7 @@ async function handleInfo(interaction: ChatInputCommandInteraction) {
   const challenge = await getActiveChallenge(guildId, type);
 
   const participantCount = await db.client.challengeSubmission.count({
-    where: { guildId, type: type as any, periodStart: toDateStr(challenge.start) },
+    where: { guildId, type: type as any, periodStart: toDateOnly(challenge.start) },
   });
 
   const embed = new EmbedBuilder()
@@ -411,8 +413,8 @@ async function handleSubmit(interaction: ChatInputCommandInteraction) {
         guildId,
         userDiscordId: interaction.user.id,
         type: type as any,
-        periodStart: toDateStr(challenge.start),
-        periodEnd: toDateStr(challenge.end),
+        periodStart: toDateOnly(challenge.start),
+        periodEnd: toDateOnly(challenge.end),
         submittedAt: new Date(),
         metadata,
       },
@@ -554,7 +556,7 @@ async function handleVote(interaction: ChatInputCommandInteraction) {
       data: {
         guildId,
         type: type as any,
-        periodStart,
+        periodStart: toDateOnly(challenge.start),
         voterDiscordId: voterId,
         targetUserDiscordId: target.user_discord_id,
         votedAt: new Date(),
