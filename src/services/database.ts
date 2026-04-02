@@ -10,13 +10,7 @@ class DatabaseManager {
   private isConnected = false;
 
   private constructor() {
-    this.prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL,
-        },
-      },
-    });
+    this.prisma = new PrismaClient();
   }
 
   /**
