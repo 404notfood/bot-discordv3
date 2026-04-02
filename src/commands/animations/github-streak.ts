@@ -85,8 +85,9 @@ function formatActivity(event: any): string {
 
   switch (event.type) {
     case 'PushEvent': {
-      const commits = event.payload.commits || 0;
-      return `📝 ${commits} commit${commits > 1 ? 's' : ''} sur ${event.repo} (${date})`;
+      const commits = event.payload.commits || 1;
+      const branch = event.payload.branch ? ` (${event.payload.branch})` : '';
+      return `📝 ${commits} commit${commits > 1 ? 's' : ''} sur ${event.repo}${branch} (${date})`;
     }
     case 'IssuesEvent':
       return `🐛 ${event.payload.action} issue sur ${event.repo} (${date})`;
