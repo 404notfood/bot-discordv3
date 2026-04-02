@@ -130,6 +130,8 @@ enum ModerationAction {
   mute
   warn
   timeout
+  audit
+  preavis
 }
 
 enum BanLevel {

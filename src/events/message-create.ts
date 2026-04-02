@@ -716,10 +716,42 @@ const messageCreateEvent: BotEvent = {
     if (message.author.bot) return;
 
     // ------------------------------------------------------------------
-    // Retrait du role "Nouvel utilisateur" au premier message
+    // Tracking activite + retrait du role "Nouvel utilisateur"
     // ------------------------------------------------------------------
     if (message.guild && message.member) {
       try {
+        // Mise a jour du compteur de messages et derniere activite
+        await db.client.guildMember.upsert({
+          where: {
+            guildId_userId: {
+              guildId: message.guild.id,
+              userId: message.author.id,
+            },
+          },
+          update: {
+            messageCount: { increment: 1 },
+            lastActiveAt: new Date(),
+            username: message.author.username,
+            displayName: message.member.displayName,
+          },
+          create: {
+            guildId: message.guild.id,
+            userId: message.author.id,
+            username: message.author.username,
+            displayName: message.member.displayName,
+            roles: message.member.roles.cache.map((r) => r.id).join(','),
+            joinedAt: message.member.joinedAt || new Date(),
+            isBot: message.author.bot,
+            messageCount: 1,
+            lastActiveAt: new Date(),
+          },
+        });
+      } catch (err) {
+        log.debug('Erreur tracking activite membre', { error: err });
+      }
+
+      try {
+        // Retrait du role "Nouvel utilisateur" au premier message
         const guildConfig = await db.client.guildConfig.findUnique({
           where: { guildId: message.guild.id },
           select: { autoRoles: true, autoRoleId: true },
