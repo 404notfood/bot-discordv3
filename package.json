@@ -16,7 +16,9 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
+    "pg": "^8.16.0",
     "@types/cors": "^2.8.19",
     "axios": "^1.13.3",
     "cors": "^2.8.6",
