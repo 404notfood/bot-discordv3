@@ -110,11 +110,12 @@ async function saveStreakStats(discordId: string, activity: any) {
       INSERT INTO github_streaks
       (discord_id, github_username, streak_days, last_commit_date, total_repos, followers, updated_at)
       VALUES (${discordId}, ${activity.user.login}, ${activity.streak}, NOW(), ${activity.user.publicRepos}, ${activity.user.followers}, NOW())
-      ON DUPLICATE KEY UPDATE
-      streak_days = VALUES(streak_days),
-      last_commit_date = VALUES(last_commit_date),
-      total_repos = VALUES(total_repos),
-      followers = VALUES(followers),
+      ON CONFLICT (discord_id, github_username) DO UPDATE SET
+      streak_days = EXCLUDED.streak_days,
+      best_streak = GREATEST(github_streaks.best_streak, EXCLUDED.streak_days),
+      last_commit_date = EXCLUDED.last_commit_date,
+      total_repos = EXCLUDED.total_repos,
+      followers = EXCLUDED.followers,
       updated_at = NOW()
     `;
   } catch (error) {
