@@ -8,6 +8,7 @@ import { GuildSyncService } from './services/guild-sync';
 import { temporaryRolesService } from './services/temporary-roles';
 import { jobOffersService } from './services/job-offers';
 import { BotWebSocketServer } from './services/websocket';
+import { challengeScheduler } from './services/cron-challenges';
 import { BotApiServer } from './api';
 
 let client: BotClient;
@@ -88,6 +89,15 @@ export async function bootstrap(): Promise<BotClient> {
         log.error('Job offers service error', { error: err.message });
       }
 
+      // Challenge scheduler (auto-announce + auto-close + role transfer)
+      try {
+        challengeScheduler.start(client);
+        log.info('Challenge scheduler service started');
+      } catch (error) {
+        const err = error as Error;
+        log.error('Challenge scheduler error', { error: err.message });
+      }
+
       // WebSocket server
       try {
         wsServer = new BotWebSocketServer(client);
@@ -135,6 +145,9 @@ export async function shutdown(signal: string): Promise<void> {
     if (wsServer) {
       wsServer.stop();
     }
+
+    // Stop challenge scheduler
+    challengeScheduler.stop();
 
     // Stop temporary roles service
     await temporaryRolesService.cleanup();

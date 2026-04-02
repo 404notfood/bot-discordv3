@@ -54,18 +54,6 @@ export default {
         .addIntegerOption((o) =>
           o.setName('count').setDescription('Nombre de questions (1-20)').setRequired(false).setMinValue(1).setMaxValue(20)
         )
-        .addStringOption((o) =>
-          o
-            .setName('difficulty')
-            .setDescription('Difficulté du quiz')
-            .setRequired(false)
-            .addChoices(
-              { name: 'Toutes difficultés', value: 'all' },
-              { name: 'Facile 🟢', value: 'easy' },
-              { name: 'Moyen 🟡', value: 'medium' },
-              { name: 'Difficile 🔴', value: 'hard' }
-            )
-        )
     )
     .addSubcommand((sub) =>
       sub
@@ -76,18 +64,6 @@ export default {
         )
         .addStringOption((o) =>
           o.setName('theme').setDescription('Thème du quiz').setRequired(false).setAutocomplete(true)
-        )
-        .addStringOption((o) =>
-          o
-            .setName('difficulty')
-            .setDescription('Difficulté du quiz')
-            .setRequired(false)
-            .addChoices(
-              { name: 'Toutes difficultés', value: 'all' },
-              { name: 'Facile 🟢', value: 'easy' },
-              { name: 'Moyen 🟡', value: 'medium' },
-              { name: 'Difficile 🔴', value: 'hard' }
-            )
         )
     )
     .addSubcommand((sub) =>
@@ -211,7 +187,6 @@ export default {
       if (sub === 'start') {
         const theme = interaction.options.getString('theme');
         const count = interaction.options.getInteger('count') || 20;
-        const difficulty = interaction.options.getString('difficulty') || 'all';
 
         const cfg = await db.client.quizConfig.findUnique({
           where: { guildId: interaction.guildId },
@@ -229,12 +204,6 @@ export default {
         }
 
         const title = theme ? `Quiz Thème: ${theme.toUpperCase()}` : 'Quiz Développeur';
-        const difficultyNames: Record<string, string> = {
-          all: 'Toute',
-          easy: 'Facile',
-          medium: 'Medium',
-          hard: 'Difficile',
-        };
 
         const channelName = 'isTextBased' in quizChannel ? (quizChannel as any).name || 'quiz' : 'quiz';
         const rules = new EmbedBuilder()
@@ -250,7 +219,7 @@ export default {
             },
             {
               name: 'Configuration',
-              value: `📝 **${count} questions**\n🎯 **Difficulté :** ${difficultyNames[difficulty]}`,
+              value: `📝 **${count} questions**\n🎯 **Thème :** ${theme ? theme.charAt(0).toUpperCase() + theme.slice(1) : 'Aléatoire (tous thèmes)'}`,
               inline: true,
             },
             { name: 'Début', value: '⏱️ 5 minutes', inline: true }
@@ -368,10 +337,10 @@ export default {
         const themes = await db.client.$queryRaw<Array<{ slug: string; name: string; question_count: number }>>`
           SELECT t.slug, t.name, COUNT(q.id) as question_count
           FROM quiz_themes t
-          LEFT JOIN quiz_questions q ON q.theme_id = t.id AND q.is_active = 1
-          WHERE t.is_active = 1
+          LEFT JOIN quiz_questions q ON q.theme_id = t.id AND q.is_active = true
+          WHERE t.is_active = true
           GROUP BY t.id, t.slug, t.name
-          HAVING question_count > 0
+          HAVING COUNT(q.id) > 0
           ORDER BY t.name ASC
         `;
 

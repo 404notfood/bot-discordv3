@@ -3,7 +3,7 @@ import { db } from './database';
 import { temporaryRolesService } from './temporary-roles';
 import { log } from './logger';
 import { sleep } from '../utils/sleep';
-import { QuizSessionStatus, QuizDifficulty } from '../generated/prisma/client';
+import { QuizSessionStatus } from '../generated/prisma/client';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,7 +28,6 @@ const BASE_POINTS: Record<string, number> = { easy: 10, medium: 15, hard: 25 };
 async function buildQuestionSet(
   sessionId: bigint,
   themeSlug: string | null,
-  difficulty: QuizDifficulty | null,
   count: number,
 ): Promise<void> {
   const where: any = { isActive: true };
@@ -36,10 +35,6 @@ async function buildQuestionSet(
   if (themeSlug) {
     const theme = await db.client.quizTheme.findUnique({ where: { slug: themeSlug } });
     if (theme) where.themeId = theme.id;
-  }
-
-  if (difficulty) {
-    where.difficulty = difficulty;
   }
 
   // Prisma does not support ORDER BY RAND(), so we fetch more, shuffle, then slice
@@ -124,7 +119,6 @@ export async function runSession(client: Client, session: any): Promise<void> {
       await buildQuestionSet(
         session.id,
         session.themeSlug,
-        session.difficulty,
         session.questionCount || 20,
       );
     }
@@ -398,7 +392,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
       try {
         let rewardConfig = await db.client.$queryRaw<any[]>`
           SELECT * FROM quiz_rewards_config
-          WHERE guild_id = ${session.guildId} AND is_active = 1
+          WHERE guild_id = ${session.guildId} AND is_active = true
           LIMIT 1
         `.then((r: any) => r[0]);
 
@@ -419,7 +413,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
             if (role) {
               await db.client.$executeRaw`
                 INSERT INTO quiz_rewards_config (guild_id, winner_role_id, duration_days, reward_message, is_active, created_at, updated_at)
-                VALUES (${session.guildId}, ${role.id}, 5, 'Felicitations ! Vous avez gagne le quiz et obtenez le role de champion pour 5 jours ! 🏆', 1, NOW(), NOW())
+                VALUES (${session.guildId}, ${role.id}, 5, 'Felicitations ! Vous avez gagne le quiz et obtenez le role de champion pour 5 jours ! 🏆', true, NOW(), NOW())
               `;
 
               rewardConfig = {
