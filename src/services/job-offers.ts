@@ -259,7 +259,7 @@ export class JobOffersService {
         const params: Record<string, string> = {
           motsCles: keyword,
           range: '0-14',
-          publieeDepuis: '15',
+          publieeDepuis: '14',
         };
 
         if (config.contractTypes) params.typeContrat = config.contractTypes;
@@ -285,9 +285,9 @@ export class JobOffersService {
       } catch (error) {
         const err = error as AxiosError;
         if (err.response?.status !== 204) {
-          log.warn(`JobOffersService: search error for "${keyword}"`, {
+          log.warn(`JobOffersService: search error for "${keyword}" ${err.message}`, {
             status: err.response?.status,
-            message: err.message,
+            data: err.response?.data,
           });
         }
       }
