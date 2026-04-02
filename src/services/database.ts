@@ -242,6 +242,11 @@ class DatabaseManager {
   }
 }
 
-/** Instance singleton du gestionnaire de base de donnees */
-export const db = DatabaseManager.getInstance();
+/** Proxy lazy pour que l'instanciation n'ait lieu qu'apres le chargement de dotenv */
+export const db = new Proxy({} as DatabaseManager, {
+  get(_target, prop, receiver) {
+    const instance = DatabaseManager.getInstance();
+    return Reflect.get(instance, prop, receiver);
+  },
+});
 export { DatabaseManager };
