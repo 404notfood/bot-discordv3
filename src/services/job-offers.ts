@@ -256,10 +256,15 @@ export class JobOffersService {
 
     for (const keyword of keywords) {
       try {
+        // Ne recuperer que les offres publiees dans les 15 derniers jours
+        const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+        const minDate = fifteenDaysAgo.toISOString().split('T')[0] + 'T00:00:00Z';
+
         const params: Record<string, string> = {
           motsCles: keyword,
           range: '0-14',
           experienceExige: 'D',
+          minCreationDate: minDate,
         };
 
         if (config.contractTypes) params.typeContrat = config.contractTypes;
