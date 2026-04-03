@@ -9,8 +9,8 @@ import { executeAudit, buildAuditEmbed } from '../../services/audit-membres';
 
 export default {
   data: new SlashCommandBuilder()
-    .setName('audit-membres')
-    .setDescription('Auditer les membres inactifs et attribuer les roles (sans envoyer de DM)')
+    .setName('audit-membres-dm')
+    .setDescription('Auditer les membres inactifs, attribuer les roles ET envoyer un DM d\'avertissement')
     .addRoleOption((option) =>
       option
         .setName('role-debutant')
@@ -54,13 +54,13 @@ export default {
     await interaction.deferReply();
 
     try {
-      await interaction.editReply('🔍 Scan de l\'historique des canaux en cours... Cela peut prendre quelques minutes.');
+      await interaction.editReply('🔍 Scan de l\'historique des canaux en cours + envoi de DM... Cela peut prendre quelques minutes.');
 
       const result = await executeAudit({
         guild: interaction.guild,
         roleDebutantId: roleDebutant.id,
         rolePreavisId: rolePreavis.id,
-        sendDMs: false,
+        sendDMs: true,
       });
 
       // Log en BDD
@@ -70,17 +70,17 @@ export default {
           userId: interaction.user.id,
           moderatorId: interaction.user.id,
           guildId: interaction.guild.id,
-          reason: `Audit (sans DM): ${result.debutantCount} debutants, ${result.preavisCount} en preavis, ${result.skippedActive} actifs`,
+          reason: `Audit (avec DM): ${result.debutantCount} debutants, ${result.preavisCount} en preavis, ${result.dmSentCount} DMs envoyes`,
           executedAt: new Date(),
         },
       });
 
-      const embed = buildAuditEmbed(result, roleDebutant.name, rolePreavis.name, false);
+      const embed = buildAuditEmbed(result, roleDebutant.name, rolePreavis.name, true);
       await interaction.editReply({ content: '', embeds: [embed] });
 
-      log.service('Audit', `Audit (sans DM) termine sur ${interaction.guild.name}: ${result.debutantCount} debutants, ${result.preavisCount} en preavis`);
+      log.service('Audit', `Audit (avec DM) termine sur ${interaction.guild.name}: ${result.debutantCount} debutants, ${result.preavisCount} en preavis, ${result.dmSentCount} DMs`);
     } catch (error) {
-      log.error('Erreur audit-membres:', error);
+      log.error('Erreur audit-membres-dm:', error);
       await interaction.editReply({ content: 'Une erreur est survenue lors de l\'audit des membres.' });
     }
   },

@@ -286,6 +286,7 @@ model GuildConfig {
   moderatorRoleId  String?   @map("moderator_role_id") @db.VarChar(20)
   autoRoleId       String?   @map("auto_role_id") @db.VarChar(20)
   mutedRoleId      String?   @map("muted_role_id") @db.VarChar(20)
+  preavisRoleId    String?   @map("preavis_role_id") @db.VarChar(20)
   autoModeration   Boolean   @default(false) @map("auto_moderation")
   welcomeMessages  Boolean   @default(true) @map("welcome_messages")
   autoRoles        Boolean   @default(false) @map("auto_roles")

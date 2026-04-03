@@ -751,12 +751,13 @@ const messageCreateEvent: BotEvent = {
       }
 
       try {
-        // Retrait du role "Nouvel utilisateur" au premier message
+        // Retrait du role "Nouvel utilisateur" et/ou "En Preavis" au message
         const guildConfig = await db.client.guildConfig.findUnique({
           where: { guildId: message.guild.id },
-          select: { autoRoles: true, autoRoleId: true },
+          select: { autoRoles: true, autoRoleId: true, preavisRoleId: true },
         });
 
+        // Retrait du role "Nouvel utilisateur" au premier message
         if (guildConfig?.autoRoles && guildConfig.autoRoleId) {
           const hasNewRole = message.member.roles.cache.has(guildConfig.autoRoleId);
           if (hasNewRole) {
@@ -765,6 +766,27 @@ const messageCreateEvent: BotEvent = {
               'Premier message - retrait du role Nouvel utilisateur'
             );
             log.service('Welcome', `Role Nouvel utilisateur retire de ${message.author.tag} (premier message)`);
+          }
+        }
+
+        // Retrait du role "En Preavis" si le membre parle
+        if (guildConfig?.preavisRoleId) {
+          const hasPreavisRole = message.member.roles.cache.has(guildConfig.preavisRoleId);
+          if (hasPreavisRole) {
+            await message.member.roles.remove(
+              guildConfig.preavisRoleId,
+              'Membre actif - retrait du role En Preavis'
+            );
+            log.service('Audit', `Role En Preavis retire de ${message.author.tag} (membre actif)`);
+
+            // Envoyer un petit DM sympa
+            try {
+              await message.author.send(
+                `🎉 Super ! Tu as parle sur **${message.guild!.name}** donc ton preavis a ete annule. Content de te voir actif parmi nous !`
+              );
+            } catch {
+              // DMs fermes, pas grave
+            }
           }
         }
       } catch (err) {
