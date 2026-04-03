@@ -23,6 +23,12 @@ export default {
         .setDescription('Role a attribuer aux membres inactifs depuis 8 mois')
         .setRequired(true)
     )
+    .addRoleOption((option) =>
+      option
+        .setName('role-ignore')
+        .setDescription('Role a ignorer (les membres avec ce role ne seront pas audites)')
+        .setRequired(false)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles | PermissionFlagsBits.KickMembers),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -33,6 +39,7 @@ export default {
 
     const roleDebutant = interaction.options.getRole('role-debutant', true);
     const rolePreavis = interaction.options.getRole('role-preavis', true);
+    const roleIgnore = interaction.options.getRole('role-ignore');
 
     // Verifier que le bot peut gerer ces roles
     const botMember = interaction.guild.members.me;
@@ -60,6 +67,7 @@ export default {
         guild: interaction.guild,
         roleDebutantId: roleDebutant.id,
         rolePreavisId: rolePreavis.id,
+        roleIgnoreId: roleIgnore?.id,
         sendDMs: false,
       });
 

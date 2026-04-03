@@ -17,6 +17,7 @@ export interface AuditOptions {
   guild: Guild;
   roleDebutantId: string;
   rolePreavisId: string;
+  roleIgnoreId?: string;
   sendDMs: boolean;
 }
 
@@ -27,6 +28,7 @@ export interface AuditResult {
   dmFailCount: number;
   skippedBots: number;
   skippedActive: number;
+  skippedIgnored: number;
   totalScanned: number;
   channelsScanned: number;
   membersInHistory: number;
@@ -114,7 +116,7 @@ export async function scanChannelHistory(guild: Guild): Promise<Map<string, Date
 // ============================================================
 
 export async function executeAudit(options: AuditOptions): Promise<AuditResult> {
-  const { guild, roleDebutantId, rolePreavisId, sendDMs } = options;
+  const { guild, roleDebutantId, rolePreavisId, roleIgnoreId, sendDMs } = options;
 
   // Sauvegarder le role preavis en config
   await db.client.guildConfig.upsert({
@@ -146,6 +148,7 @@ export async function executeAudit(options: AuditOptions): Promise<AuditResult> 
     dmFailCount: 0,
     skippedBots: 0,
     skippedActive: 0,
+    skippedIgnored: 0,
     totalScanned: members.size,
     channelsScanned: textChannels.size,
     membersInHistory: lastMessageMap.size,
@@ -160,6 +163,12 @@ export async function executeAudit(options: AuditOptions): Promise<AuditResult> 
       continue;
     }
     if (member.permissions.has(PermissionFlagsBits.Administrator)) continue;
+
+    // Ignorer les membres avec le role d'immunite
+    if (roleIgnoreId && member.roles.cache.has(roleIgnoreId)) {
+      result.skippedIgnored++;
+      continue;
+    }
 
     // Ne pas traiter si le membre a deja le role preavis
     if (member.roles.cache.has(rolePreavisId)) continue;
@@ -326,6 +335,7 @@ export function buildAuditEmbed(
         value: [
           `Membres scannes : **${result.totalScanned}**`,
           `Membres actifs (ignores) : **${result.skippedActive}**`,
+          result.skippedIgnored > 0 ? `Membres immunises (ignores) : **${result.skippedIgnored}**` : '',
           `Bots ignores : **${result.skippedBots}**`,
           `Role "${roleDebutantName}" attribue : **${result.debutantCount}**`,
           `Role "${rolePreavisName}" attribue : **${result.preavisCount}**`,
