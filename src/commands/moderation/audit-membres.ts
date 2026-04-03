@@ -24,7 +24,7 @@ export default {
         .setDescription('Role a attribuer aux membres inactifs depuis 8 mois')
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles | PermissionFlagsBits.KickMembers),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!interaction.guild) {

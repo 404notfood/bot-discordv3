@@ -23,7 +23,7 @@ export default {
         .setDescription('Voir la liste sans kicker (mode dry-run)')
         .setRequired(false)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles | PermissionFlagsBits.KickMembers),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!interaction.guild) {
