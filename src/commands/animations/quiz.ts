@@ -85,7 +85,8 @@ export default {
         .addStringOption((o) => o.setName('message').setDescription('Message de félicitation personnalisé').setRequired(false))
         .addBooleanOption((o) => o.setName('active').setDescription('Activer/désactiver les récompenses').setRequired(false))
     )
-    .addSubcommand((sub) => sub.setName('points').setDescription('Afficher le système de points du quiz')),
+    .addSubcommand((sub) => sub.setName('points').setDescription('Afficher le système de points du quiz'))
+    .addSubcommand((sub) => sub.setName('stop').setDescription('Arrêter le quiz en cours')),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!(await PermissionsManager.requireAdmin(interaction))) {
@@ -367,7 +368,29 @@ export default {
         return;
       }
 
-      await interaction.reply({ content: 'Sous-commande inconnue.', ephemeral: true });
+      // -- Stop quiz --
+      if (sub === 'stop') {
+        const cancelled = await db.client.quizSession.updateMany({
+          where: {
+            guildId: interaction.guildId!,
+            status: { in: ['scheduled', 'announced', 'running'] },
+          },
+          data: {
+            status: 'cancelled',
+            endAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        if (cancelled.count === 0) {
+          await interaction.reply({ content: 'Aucun quiz actif a arreter.', flags: 64 });
+        } else {
+          await interaction.reply({ content: `✅ ${cancelled.count} quiz arrete(s). Les sessions en cours sont annulees.`, flags: 64 });
+        }
+        return;
+      }
+
+      await interaction.reply({ content: 'Sous-commande inconnue.', flags: 64 });
     } catch (e) {
       log.error('quiz command error:', e);
       await interaction.reply({ content: 'Erreur lors du traitement.', ephemeral: true });
