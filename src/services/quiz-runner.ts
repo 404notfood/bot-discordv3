@@ -183,6 +183,11 @@ export async function runSession(client: Client, session: any): Promise<void> {
           text: `Vous avez 30 secondes • Niveau: ${DIFFICULTY_LABEL[q.difficulty || 'medium'] || 'Moyen'}`,
         });
 
+      // Update current position so message-create knows which question we're on
+      await db.client.$executeRaw`
+        UPDATE quiz_sessions SET current_position = ${q.position}, updated_at = NOW() WHERE id = ${session.id}
+      `;
+
       const askedAt = Date.now();
       await channel.send({ embeds: [prompt] });
 

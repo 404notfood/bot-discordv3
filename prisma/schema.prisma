@@ -938,6 +938,7 @@ model QuizSession {
   startAt       DateTime?         @map("start_at") @db.Timestamptz
   announceAt    DateTime?         @map("announce_at") @db.Timestamptz
   endAt         DateTime?         @map("end_at") @db.Timestamptz
+  currentPosition Int             @default(0) @map("current_position")
   status        QuizSessionStatus @default(scheduled)
   createdAt     DateTime?         @map("created_at") @db.Timestamptz
   updatedAt     DateTime?         @map("updated_at") @db.Timestamptz

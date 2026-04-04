@@ -890,25 +890,16 @@ const messageCreateEvent: BotEvent = {
         );
         if (!session || session.status !== 'running') return;
 
-        // Calculate current question position based on elapsed time
-        const now = Date.now();
-        const sessionStart = session.startAt
-          ? new Date(session.startAt).getTime()
-          : now;
-        const timeSinceScheduled = Math.floor((now - sessionStart) / 1000);
+        // Read current position directly from session (set by quiz-runner)
+        const posResult = await prisma.$queryRaw<any[]>`
+          SELECT current_position FROM quiz_sessions WHERE id = ${session.id}
+        `;
+        const currentPosition = posResult[0]?.current_position || 0;
 
-        let currentPosition = 1;
-
-        if (session.status === 'running') {
-          const secondsPerQuestion = 35;
-          currentPosition =
-            Math.floor(timeSinceScheduled / secondsPerQuestion) + 1;
-          currentPosition = Math.min(currentPosition, 50);
-        }
+        if (currentPosition === 0) return; // Quiz not started yet
 
         log.debug('Quiz answer received', {
           sessionId: session.id,
-          timeSinceStart: timeSinceScheduled,
           currentPosition,
         });
 
