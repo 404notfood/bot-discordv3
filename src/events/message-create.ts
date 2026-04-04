@@ -784,18 +784,33 @@ const messageCreateEvent: BotEvent = {
           const displayName =
             message.member?.displayName || message.author.username;
 
-          await prisma.quizParticipant.upsert({
+          // Check if already registered
+          const existing = await prisma.quizParticipant.findUnique({
             where: {
               sessionId_userDiscordId: {
                 sessionId: session.id,
                 userDiscordId: message.author.id,
               },
             },
-            update: {
-              username: displayName,
-              updatedAt: new Date(),
-            },
-            create: {
+          });
+
+          if (existing) {
+            // Already registered — roast them
+            const roasts = [
+              `Non mais ca va pas la tete **${displayName}** ?! Tu es deja inscrit(e) ! 🤦`,
+              `**${displayName}**, tu as deja clique une fois, c'est pas en spammant que tu vas avoir des points bonus ! 😤`,
+              `Eh oh **${displayName}**, on t'a dit OUI la premiere fois, pas la peine d'insister comme un demarcheur telephonique ! 📞`,
+              `**${displayName}** revient a la charge ! Malheureusement, double inscription = 0 point bonus. Beau calcul. 🧮`,
+              `Calme-toi **${displayName}**, t'es deja sur la liste ! A moins que tu veuilles t'inscrire deux fois pour perdre deux fois ? 😏`,
+              `**${displayName}**, t'es du genre a appuyer 47 fois sur le bouton de l'ascenseur aussi, non ? T'es DEJA inscrit(e) ! 🛗`,
+            ];
+            const roast = roasts[Math.floor(Math.random() * roasts.length)];
+            return message.reply(roast);
+          }
+
+          // New registration
+          await prisma.quizParticipant.create({
+            data: {
               sessionId: session.id,
               userId: message.author.id,
               userDiscordId: message.author.id,
@@ -806,7 +821,16 @@ const messageCreateEvent: BotEvent = {
             },
           });
 
-          return message.react('✅');
+          const welcomes = [
+            `Youhou ! **${displayName}** debarque dans l'arene ! Que le spectacle commence ! 🎪🔥`,
+            `**${displayName}** entre en jeu ! Attention les neurones, ca va chauffer ! 🧠💥`,
+            `Accrochez-vous, **${displayName}** est la ! Les autres n'ont qu'a bien se tenir ! 💪😎`,
+            `**${displayName}** a rejoint la partie ! Un cerveau de plus dans la bataille ! ⚔️🧠`,
+            `Alerte ! **${displayName}** vient faire joujou avec nous ! Que la fete commence ! 🎉🕹️`,
+            `**${displayName}** s'est jete(e) dans la fosse aux questions ! Courage, il en faudra ! 🦁`,
+          ];
+          const welcome = welcomes[Math.floor(Math.random() * welcomes.length)];
+          return message.reply(welcome);
         }
         return;
       }
