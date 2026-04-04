@@ -6,8 +6,8 @@
 BEGIN;
 
 -- Dataset insert
-INSERT INTO sql_clinic_datasets (slug, name, description, db_type, is_active, created_at, updated_at)
-VALUES ('universite', 'Université Paris-Lumière', 'Base de données d''une université avec professeurs, étudiants, cours et notes.', 'sqlite', true, NOW(), NOW())
+INSERT INTO sql_clinic_datasets (slug, name, description, is_active, created_at, updated_at)
+VALUES ('universite', 'Université Paris-Lumière', 'Base de données d''une université avec professeurs, étudiants, cours et notes.', true, NOW(), NOW())
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================================================

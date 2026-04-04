@@ -6,8 +6,8 @@
 BEGIN;
 
 -- Dataset insert
-INSERT INTO sql_clinic_datasets (slug, name, description, db_type, is_active, created_at, updated_at)
-VALUES ('sport', 'Ligue de Football', 'Base de données d''une ligue de football avec équipes, joueurs, matchs, buts et cartons.', 'sqlite', true, NOW(), NOW())
+INSERT INTO sql_clinic_datasets (slug, name, description, is_active, created_at, updated_at)
+VALUES ('sport', 'Ligue de Football', 'Base de données d''une ligue de football avec équipes, joueurs, matchs, buts et cartons.', true, NOW(), NOW())
 ON CONFLICT (slug) DO NOTHING;
 
 -- ==================== BEGINNER (1-15) ====================

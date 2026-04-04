@@ -12,8 +12,8 @@ BEGIN;
 -- DATASET REGISTRATION
 -- ============================================================================
 
-INSERT INTO sql_clinic_datasets (slug, name, description, db_type, is_active, created_at, updated_at)
-VALUES ('bibliotheque', 'Bibliothèque Municipale', 'Base de données d''une bibliothèque avec auteurs, livres, adhérents et emprunts.', 'sqlite', true, NOW(), NOW())
+INSERT INTO sql_clinic_datasets (slug, name, description, is_active, created_at, updated_at)
+VALUES ('bibliotheque', 'Bibliothèque Municipale', 'Base de données d''une bibliothèque avec auteurs, livres, adhérents et emprunts.', true, NOW(), NOW())
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================================================

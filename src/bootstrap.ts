@@ -9,12 +9,14 @@ import { temporaryRolesService } from './services/temporary-roles';
 import { jobOffersService } from './services/job-offers';
 import { BotWebSocketServer } from './services/websocket';
 import { challengeScheduler } from './services/cron-challenges';
+import { tickQuizScheduler } from './services/quiz-runner';
 import { BotApiServer } from './api';
 
 let client: BotClient;
 let wsServer: BotWebSocketServer | undefined;
 let apiServer: BotApiServer | undefined;
 let guildSyncService: GuildSyncService | undefined;
+let quizSchedulerInterval: ReturnType<typeof setInterval> | undefined;
 
 export async function bootstrap(): Promise<BotClient> {
   try {
@@ -98,6 +100,19 @@ export async function bootstrap(): Promise<BotClient> {
         log.error('Challenge scheduler error', { error: err.message });
       }
 
+      // Quiz scheduler (check for sessions to start every 10s)
+      try {
+        quizSchedulerInterval = setInterval(() => {
+          tickQuizScheduler(client).catch((err) =>
+            log.error('Quiz scheduler tick error', { error: err })
+          );
+        }, 10_000);
+        log.info('Quiz scheduler started (10s interval)');
+      } catch (error) {
+        const err = error as Error;
+        log.error('Quiz scheduler error', { error: err.message });
+      }
+
       // WebSocket server
       try {
         wsServer = new BotWebSocketServer(client);
@@ -144,6 +159,11 @@ export async function shutdown(signal: string): Promise<void> {
     // Stop WebSocket server
     if (wsServer) {
       wsServer.stop();
+    }
+
+    // Stop quiz scheduler
+    if (quizSchedulerInterval) {
+      clearInterval(quizSchedulerInterval);
     }
 
     // Stop challenge scheduler

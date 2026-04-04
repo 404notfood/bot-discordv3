@@ -7,8 +7,8 @@
 BEGIN;
 
 -- Dataset registration
-INSERT INTO sql_clinic_datasets (slug, name, description, db_type, is_active, created_at, updated_at)
-VALUES ('hopital', 'Hôpital Saint-Louis', 'Base de données d''un hôpital avec médecins, patients, consultations et prescriptions.', 'sqlite', true, NOW(), NOW())
+INSERT INTO sql_clinic_datasets (slug, name, description, is_active, created_at, updated_at)
+VALUES ('hopital', 'Hôpital Saint-Louis', 'Base de données d''un hôpital avec médecins, patients, consultations et prescriptions.', true, NOW(), NOW())
 ON CONFLICT (slug) DO NOTHING;
 
 -- ==================== BEGINNER (1-15) ====================

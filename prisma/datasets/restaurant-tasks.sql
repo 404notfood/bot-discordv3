@@ -7,8 +7,8 @@
 BEGIN;
 
 -- Dataset insert
-INSERT INTO sql_clinic_datasets (slug, name, description, db_type, is_active, created_at, updated_at)
-VALUES ('restaurant', 'Restaurant Le Gourmet', 'Base de donnees d''un restaurant avec serveurs, plats, commandes et reservations.', 'sqlite', true, NOW(), NOW())
+INSERT INTO sql_clinic_datasets (slug, name, description, is_active, created_at, updated_at)
+VALUES ('restaurant', 'Restaurant Le Gourmet', 'Base de donnees d''un restaurant avec serveurs, plats, commandes et reservations.', true, NOW(), NOW())
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================================================
