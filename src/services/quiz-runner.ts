@@ -135,13 +135,13 @@ export async function runSession(client: Client, session: any): Promise<void> {
       orderBy: { position: 'asc' },
     });
 
-    // Fetch full question details
+    // Fetch full question details (preserve sessionQuestion.id as sessionQuestionId)
     const questionsDetails = await Promise.all(
       questions.map(async (q: any) => {
         const question = await db.client.quizQuestion.findUnique({
           where: { id: q.questionId },
         });
-        return { ...q, ...question };
+        return { ...question, ...q, sessionQuestionId: q.id };
       }),
     );
 
@@ -197,7 +197,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
       // Score the responses
       const correctSet = new Set<string>(JSON.parse(correctLabelsUpdated));
       const responses = await db.client.quizResponse.findMany({
-        where: { sessionId: session.id, sessionQuestionId: q.id },
+        where: { sessionId: session.id, sessionQuestionId: q.sessionQuestionId },
       });
 
       const questionBasePoints = BASE_POINTS[q.difficulty || 'medium'] || 15;

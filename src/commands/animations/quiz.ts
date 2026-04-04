@@ -54,6 +54,9 @@ export default {
         .addIntegerOption((o) =>
           o.setName('count').setDescription('Nombre de questions (1-20)').setRequired(false).setMinValue(1).setMaxValue(20)
         )
+        .addIntegerOption((o) =>
+          o.setName('delai').setDescription('Délai avant départ en secondes (défaut: 300 = 5min)').setRequired(false).setMinValue(10).setMaxValue(600)
+        )
     )
     .addSubcommand((sub) =>
       sub
@@ -233,30 +236,38 @@ export default {
       if (sub === 'start') {
         const theme = interaction.options.getString('theme');
         const count = interaction.options.getInteger('count') || 20;
+        const delaiSec = interaction.options.getInteger('delai') || 300; // défaut 5 min
 
         const cfg = await db.client.quizConfig.findUnique({
           where: { guildId: interaction.guildId },
         });
 
         if (!cfg?.quizChannelId) {
-          await interaction.reply({ content: 'Canal de quiz non configuré.', ephemeral: true });
+          await interaction.reply({ content: 'Canal de quiz non configuré.', flags: 64 });
           return;
         }
 
         const quizChannel = await interaction.client.channels.fetch(cfg.quizChannelId).catch(() => null);
         if (!quizChannel || !quizChannel.isTextBased()) {
-          await interaction.reply({ content: 'Canal de quiz introuvable ou inaccessible.', ephemeral: true });
+          await interaction.reply({ content: 'Canal de quiz introuvable ou inaccessible.', flags: 64 });
           return;
         }
 
         const title = theme ? `Quiz Thème: ${theme.toUpperCase()}` : 'Quiz Développeur';
+
+        // Format delay for display
+        const delaiMin = Math.floor(delaiSec / 60);
+        const delaiResteSec = delaiSec % 60;
+        const delaiDisplay = delaiMin > 0
+          ? (delaiResteSec > 0 ? `${delaiMin}min ${delaiResteSec}s` : `${delaiMin} minute${delaiMin > 1 ? 's' : ''}`)
+          : `${delaiSec} secondes`;
 
         const channelName = 'isTextBased' in quizChannel ? (quizChannel as any).name || 'quiz' : 'quiz';
         const rules = new EmbedBuilder()
           .setColor(0x0099ff)
           .setTitle(`📣 ${title}`)
           .setDescription(
-            `Le quiz commence dans 5 minutes sur **#${channelName}**. Tapez \`!participe\` pour vous inscrire. Répondez avec les lettres (A,B,C,D) ou chiffres (1,2,3,4). Plusieurs réponses possibles selon la question.`
+            `Le quiz commence dans **${delaiDisplay}** sur **#${channelName}**. Tapez \`!participe\` pour vous inscrire. Répondez avec les lettres (A,B,C,D) ou chiffres (1,2,3,4). Plusieurs réponses possibles selon la question.`
           )
           .addFields(
             {
@@ -268,7 +279,7 @@ export default {
               value: `📝 **${count} questions**\n🎯 **Thème :** ${theme ? theme.charAt(0).toUpperCase() + theme.slice(1) : 'Aléatoire (tous thèmes)'}`,
               inline: true,
             },
-            { name: 'Début', value: '⏱️ 5 minutes', inline: true }
+            { name: 'Début', value: `⏱️ ${delaiDisplay}`, inline: true }
           );
 
         // Envoyer l'annonce dans le canal d'annonce si configuré
@@ -301,7 +312,7 @@ export default {
 
         // Créer la nouvelle session
         const now = new Date();
-        const startAt = new Date(now.getTime() + 5 * 60 * 1000);
+        const startAt = new Date(now.getTime() + delaiSec * 1000);
 
         const session = await db.client.quizSession.create({
           data: {
@@ -319,7 +330,7 @@ export default {
         // Programmer les rappels de countdown
         scheduleCountdownReminders(interaction.client, Number(session.id), quizChannel, startAt);
 
-        await interaction.reply({ content: 'Quiz programmé dans 5 minutes ✅', ephemeral: true });
+        await interaction.reply({ content: `Quiz programmé dans ${delaiDisplay} ✅`, flags: 64 });
         return;
       }
 
