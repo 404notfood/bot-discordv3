@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import { log } from './logger';
 
 // ---------------------------------------------------------------------------
@@ -16,6 +15,26 @@ export interface SqlValidation {
   expectedResult: SqlResult | null;
   error?: string;
   executionTimeMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Lazy-load better-sqlite3 (native module may not be compiled)
+// ---------------------------------------------------------------------------
+
+let Database: any = null;
+
+function getDatabase(): any {
+  if (!Database) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      Database = require('better-sqlite3');
+    } catch (err) {
+      throw new Error(
+        'better-sqlite3 non disponible. Installez build-essential puis npm rebuild better-sqlite3'
+      );
+    }
+  }
+  return Database;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,11 +58,13 @@ export class SqlSandbox {
     timeoutMs = 5000,
   ): SqlValidation {
     const startTime = Date.now();
-    let db: Database.Database | null = null;
+    let db: any = null;
 
     try {
+      const DB = getDatabase();
+
       // Create in-memory database
-      db = new Database(':memory:', { timeout: timeoutMs });
+      db = new DB(':memory:', { timeout: timeoutMs });
 
       // Security: restrict dangerous operations
       db.pragma('journal_mode = OFF');
@@ -62,7 +83,7 @@ export class SqlSandbox {
           success: false,
           userResult: null,
           expectedResult: null,
-          error: 'Seules les requetes SELECT sont autorisees.',
+          error: 'Seules les requêtes SELECT sont autorisées.',
           executionTimeMs: Date.now() - startTime,
         };
       }
@@ -73,14 +94,14 @@ export class SqlSandbox {
 
       // Convert user result to our format
       const userColumns = rawRows.length > 0 ? Object.keys(rawRows[0] as object) : [];
-      const userRows = rawRows.map((row: any) => userColumns.map((col) => row[col]));
+      const userRows = rawRows.map((row: any) => userColumns.map((col: string) => row[col]));
       const userResult: SqlResult = { columns: userColumns, rows: userRows };
 
       // Execute the expected SQL to get the reference result
       const expectedQuery = expectedSql.trim().replace(/;+$/, '');
       const expectedRawRows = db.prepare(expectedQuery).all();
       const expectedColumns = expectedRawRows.length > 0 ? Object.keys(expectedRawRows[0] as object) : [];
-      const expectedRows = expectedRawRows.map((row: any) => expectedColumns.map((col) => row[col]));
+      const expectedRows = expectedRawRows.map((row: any) => expectedColumns.map((col: string) => row[col]));
       const expectedResult: SqlResult = { columns: expectedColumns, rows: expectedRows };
 
       // Compare results
@@ -112,16 +133,17 @@ export class SqlSandbox {
    * Execute a query and return results (for preview/testing)
    */
   static execute(schemaSql: string, sql: string): SqlResult {
-    let db: Database.Database | null = null;
+    const DB = getDatabase();
+    let db: any = null;
     try {
-      db = new Database(':memory:');
+      db = new DB(':memory:');
       db.exec(schemaSql);
       const query = sql.trim().replace(/;+$/, '');
       const rows = db.prepare(query).all();
       const columns = rows.length > 0 ? Object.keys(rows[0] as object) : [];
       return {
         columns,
-        rows: rows.map((row: any) => columns.map((col) => row[col])),
+        rows: rows.map((row: any) => columns.map((col: string) => row[col])),
       };
     } finally {
       if (db) {

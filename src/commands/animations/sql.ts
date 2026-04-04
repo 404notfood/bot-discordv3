@@ -295,8 +295,21 @@ async function handleSchema(interaction: ChatInputCommandInteraction): Promise<v
     return;
   }
 
-  // Extract CREATE TABLE statements
-  const createStatements = schemaSql.match(/CREATE TABLE[^;]+;/gi) || [];
+  // Extract CREATE TABLE statements (handle nested parentheses)
+  const createStatements: string[] = [];
+  const tableRegex = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\(/gi;
+  let match;
+  while ((match = tableRegex.exec(schemaSql)) !== null) {
+    // Find matching closing parenthesis (handle nesting)
+    let depth = 1;
+    let i = match.index + match[0].length;
+    while (i < schemaSql.length && depth > 0) {
+      if (schemaSql[i] === '(') depth++;
+      if (schemaSql[i] === ')') depth--;
+      i++;
+    }
+    createStatements.push(schemaSql.substring(match.index, i));
+  }
 
   const embed = new EmbedBuilder()
     .setColor(0x3498db)
@@ -305,15 +318,31 @@ async function handleSchema(interaction: ChatInputCommandInteraction): Promise<v
 
   for (const stmt of createStatements) {
     const tableName = stmt.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)/i)?.[1] || 'table';
-    // Extract column definitions (simplified)
-    const colBlock = stmt.match(/\(([^)]+)\)/s)?.[1] || '';
-    const cols = colBlock
-      .split(',')
-      .map((c) => c.trim())
+    // Extract everything between the outer parentheses
+    const outerMatch = stmt.match(/\(([\s\S]+)\)$/);
+    const colBlock = outerMatch ? outerMatch[1] : '';
+
+    // Split on commas that are NOT inside parentheses
+    const parts: string[] = [];
+    let current = '';
+    let parenDepth = 0;
+    for (const ch of colBlock) {
+      if (ch === '(') parenDepth++;
+      if (ch === ')') parenDepth--;
+      if (ch === ',' && parenDepth === 0) {
+        parts.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) parts.push(current.trim());
+
+    const cols = parts
       .filter((c) => !c.startsWith('FOREIGN') && !c.startsWith('PRIMARY') && !c.startsWith('CHECK') && c.length > 0)
       .map((c) => {
-        const parts = c.split(/\s+/);
-        return `  ${parts[0]} ${parts[1] || ''}`;
+        const tokens = c.split(/\s+/);
+        return `  ${tokens[0]} ${tokens[1] || ''}`;
       })
       .join('\n');
 
