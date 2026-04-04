@@ -1022,6 +1022,8 @@ model ChallengeConfig {
   weeklyTitle         String?   @map("weekly_title") @db.VarChar(255)
   monthlyTitle        String?   @map("monthly_title") @db.VarChar(255)
   announceChannelId       String?   @map("announce_channel_id") @db.VarChar(20)
+  weeklyChannelId         String?   @map("weekly_channel_id") @db.VarChar(20)
+  monthlyChannelId        String?   @map("monthly_channel_id") @db.VarChar(20)
   autoAnnounceWeekly      Boolean   @default(true) @map("auto_announce_weekly")
   autoAnnounceMonthly     Boolean   @default(true) @map("auto_announce_monthly")
   challengerRoleId        String?   @map("challenger_role_id") @db.VarChar(20)

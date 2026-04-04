@@ -46,6 +46,12 @@ function roleNameForType(type: string): string {
   return type === 'weekly' ? 'Challenger' : 'Super-Challenger';
 }
 
+/** Retourne le channelId specifique au type, ou le fallback general */
+function getChannelForType(cfg: any, type: string): string | null {
+  if (type === 'weekly') return cfg.weeklyChannelId || cfg.announceChannelId || null;
+  return cfg.monthlyChannelId || cfg.announceChannelId || null;
+}
+
 // ---------------------------------------------------------------------------
 // Get active challenge (plan > config fallback)
 // ---------------------------------------------------------------------------
@@ -206,7 +212,7 @@ async function closeChallenge(
   periodStart: string,
   periodBounds: { start: Date; end: Date },
 ): Promise<void> {
-  const channelId = String(cfg.announceChannelId || '');
+  const channelId = getChannelForType(cfg, type) || '';
   const roleId = type === 'weekly'
     ? cfg.challengerRoleId
     : cfg.superChallengerRoleId;
@@ -403,8 +409,9 @@ export class ChallengeSchedulerService {
         }
 
         // --- Annonce du nouveau challenge de cette semaine ---
-        if (cfg.announceChannelId) {
-          await announceNewChallenge(this.client, cfg.guildId, 'weekly', cfg.announceChannelId);
+        const weeklyChannel = getChannelForType(cfg, 'weekly');
+        if (weeklyChannel) {
+          await announceNewChallenge(this.client, cfg.guildId, 'weekly', weeklyChannel);
         }
       }
     }
@@ -432,8 +439,9 @@ export class ChallengeSchedulerService {
           });
         }
 
-        if (cfg.announceChannelId) {
-          await announceNewChallenge(this.client, cfg.guildId, 'monthly', cfg.announceChannelId);
+        const monthlyChannel = getChannelForType(cfg, 'monthly');
+        if (monthlyChannel) {
+          await announceNewChallenge(this.client, cfg.guildId, 'monthly', monthlyChannel);
         }
       }
     }

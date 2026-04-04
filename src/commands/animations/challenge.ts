@@ -75,6 +75,12 @@ function typeEmoji(type: string): string {
   return type === 'weekly' ? '🏁' : '🏆';
 }
 
+/** Retourne le channelId specifique au type, ou le fallback general */
+function getChannelForType(cfg: any, type: string): string | null {
+  if (type === 'weekly') return cfg.weeklyChannelId || cfg.announceChannelId || null;
+  return cfg.monthlyChannelId || cfg.announceChannelId || null;
+}
+
 // ---------------------------------------------------------------------------
 // Recuperer le challenge actif (plan > config fallback)
 // ---------------------------------------------------------------------------
@@ -283,8 +289,13 @@ async function handleConfig(interaction: ChatInputCommandInteraction) {
     }
 
     if (channel) {
-      updateData.announceChannelId = channel.id;
-      createData.announceChannelId = channel.id;
+      if (type === 'weekly') {
+        updateData.weeklyChannelId = channel.id;
+        createData.weeklyChannelId = channel.id;
+      } else {
+        updateData.monthlyChannelId = channel.id;
+        createData.monthlyChannelId = channel.id;
+      }
     }
 
     await db.client.challengeConfig.upsert({
@@ -319,7 +330,7 @@ async function handleConfig(interaction: ChatInputCommandInteraction) {
       .setTitle(`${typeEmoji(type)} Challenge ${typeLabel(type)} configure`)
       .addFields(
         { name: 'Intitule', value: titre, inline: false },
-        ...(channel ? [{ name: 'Salon d\'annonce', value: `<#${channel.id}>`, inline: true }] : []),
+        ...(channel ? [{ name: `Salon ${typeLabel(type).toLowerCase()}`, value: `<#${channel.id}>`, inline: true }] : []),
       )
       .setTimestamp();
 
@@ -578,6 +589,85 @@ async function handleVote(interaction: ChatInputCommandInteraction) {
 }
 
 // ---------------------------------------------------------------------------
+// Annonce (admin) – envoyer manuellement l'annonce du challenge
+// ---------------------------------------------------------------------------
+
+async function handleAnnonce(interaction: ChatInputCommandInteraction) {
+  if (!(await PermissionsManager.requireAdmin(interaction))) return;
+
+  const guildId = interaction.guildId!;
+  const type = interaction.options.getString('type', true);
+  const channelOverride = interaction.options.getChannel('salon');
+
+  await interaction.deferReply({ flags: 64 });
+
+  const challenge = await getActiveChallenge(guildId, type);
+
+  if (!challenge.title) {
+    await interaction.editReply({
+      content: `Aucun challenge ${typeLabel(type).toLowerCase()} n'est configure pour cette periode.\nUtilisez \`/challenge config\` ou \`/challenge planifier\` d'abord.`,
+    });
+    return;
+  }
+
+  // Determiner le salon cible
+  let targetChannelId = channelOverride?.id || null;
+
+  if (!targetChannelId) {
+    const cfg = await db.client.challengeConfig.findUnique({ where: { guildId } });
+    if (cfg) {
+      targetChannelId = getChannelForType(cfg, type);
+    }
+  }
+
+  if (!targetChannelId) {
+    await interaction.editReply({
+      content: 'Aucun salon configure pour ce type de challenge.\nSpecifiez un salon avec l\'option `salon` ou configurez-le avec `/challenge config`.',
+    });
+    return;
+  }
+
+  const targetChannel = await interaction.client.channels.fetch(targetChannelId).catch(() => null);
+  if (!targetChannel || !targetChannel.isTextBased()) {
+    await interaction.editReply({ content: 'Salon introuvable ou inaccessible.' });
+    return;
+  }
+
+  const startTs = Math.floor(challenge.start.getTime() / 1000);
+  const endTs = Math.floor(challenge.end.getTime() / 1000);
+
+  const participantCount = await db.client.challengeSubmission.count({
+    where: { guildId, type: type as any, periodStart: toDateOnly(challenge.start) },
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(type === 'weekly' ? 0x00ae86 : 0xffd700)
+    .setTitle(`${typeEmoji(type)} Challenge ${typeLabel(type)}`)
+    .setDescription(
+      `**${challenge.title}**` +
+      (challenge.description ? `\n\n${challenge.description}` : '')
+    )
+    .addFields(
+      { name: '📅 Periode', value: `Du <t:${startTs}:D> au <t:${endTs}:D>`, inline: false },
+      { name: '👥 Participants', value: `${participantCount}`, inline: true },
+      { name: '🚀 Participer', value: '`/challenge submit`', inline: true },
+      { name: '⭐ Voter', value: '`/challenge vote`', inline: true },
+    )
+    .setFooter({
+      text: type === 'weekly'
+        ? 'Le gagnant obtient le role Challenger !'
+        : 'Le gagnant obtient le role Super-Challenger !',
+    })
+    .setTimestamp();
+
+  await (targetChannel as any).send({ embeds: [embed] });
+
+  await interaction.editReply({
+    content: `Annonce du challenge ${typeLabel(type).toLowerCase()} envoyee dans <#${targetChannelId}> !`,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Roles (admin) – configurer les roles Challenger / Super-Challenger
 // ---------------------------------------------------------------------------
 
@@ -667,7 +757,7 @@ export default {
           o.setName('titre').setDescription('Intitule du challenge').setRequired(true)
         )
         .addChannelOption((o) =>
-          o.setName('salon').setDescription('Salon d\'annonce (optionnel)').setRequired(false)
+          o.setName('salon').setDescription('Salon d\'annonce pour ce type de challenge').setRequired(false)
         )
     )
     .addSubcommand((sub) =>
@@ -761,6 +851,21 @@ export default {
     )
     .addSubcommand((sub) =>
       sub
+        .setName('annonce')
+        .setDescription('[Admin] Envoyer l\'annonce du challenge en cours')
+        .addStringOption((o) =>
+          o.setName('type').setDescription('Type de challenge').setRequired(true)
+            .addChoices(
+              { name: 'Hebdomadaire', value: 'weekly' },
+              { name: 'Mensuel', value: 'monthly' },
+            )
+        )
+        .addChannelOption((o) =>
+          o.setName('salon').setDescription('Salon cible (sinon utilise le salon configure)').setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName('roles')
         .setDescription('[Admin] Configurer les roles Challenger et Super-Challenger')
         .addRoleOption((o) =>
@@ -788,6 +893,7 @@ export default {
         case 'submit': return await handleSubmit(interaction);
         case 'leaderboard': return await handleLeaderboard(interaction);
         case 'vote': return await handleVote(interaction);
+        case 'annonce': return await handleAnnonce(interaction);
         case 'roles': return await handleRoles(interaction);
       }
     } catch (error) {
