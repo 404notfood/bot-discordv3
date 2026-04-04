@@ -921,7 +921,7 @@ model QuizRewardsConfig {
   guildId      String    @unique @map("guild_id") @db.VarChar(20)
   winnerRoleId String?   @map("winner_role_id") @db.VarChar(20)
   durationDays Int       @default(7) @map("duration_days")
-  message      String?   @db.Text
+  rewardMessage String?  @map("reward_message") @db.Text
   isActive     Boolean   @default(false) @map("is_active")
   createdAt    DateTime? @map("created_at") @db.Timestamptz
   updatedAt    DateTime? @map("updated_at") @db.Timestamptz

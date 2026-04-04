@@ -57,3 +57,15 @@ CREATE INDEX IF NOT EXISTS idx_sql_challenge_responses_participant ON sql_challe
 
 -- 4. Add hint column to sql_clinic_tasks (if not exists)
 ALTER TABLE sql_clinic_tasks ADD COLUMN IF NOT EXISTS hint TEXT;
+
+-- 5. Quiz Rewards Config
+CREATE TABLE IF NOT EXISTS quiz_rewards_configs (
+  id BIGSERIAL PRIMARY KEY,
+  guild_id VARCHAR(20) NOT NULL UNIQUE,
+  winner_role_id VARCHAR(20),
+  duration_days INT NOT NULL DEFAULT 7,
+  reward_message TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);

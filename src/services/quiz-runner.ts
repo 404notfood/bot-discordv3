@@ -391,7 +391,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
     if (podium[0]) {
       try {
         let rewardConfig = await db.client.$queryRaw<any[]>`
-          SELECT * FROM quiz_rewards_config
+          SELECT * FROM quiz_rewards_configs
           WHERE guild_id = ${session.guildId} AND is_active = true
           LIMIT 1
         `.then((r: any) => r[0]);
@@ -412,7 +412,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
 
             if (role) {
               await db.client.$executeRaw`
-                INSERT INTO quiz_rewards_config (guild_id, winner_role_id, duration_days, reward_message, is_active, created_at, updated_at)
+                INSERT INTO quiz_rewards_configs (guild_id, winner_role_id, duration_days, reward_message, is_active, created_at, updated_at)
                 VALUES (${session.guildId}, ${role.id}, 5, 'Felicitations ! Vous avez gagne le quiz et obtenez le role de champion pour 5 jours ! 🏆', true, NOW(), NOW())
               `;
 
@@ -446,7 +446,7 @@ export async function runSession(client: Client, session: any): Promise<void> {
 
             if (role) {
               await db.client.$executeRaw`
-                UPDATE quiz_rewards_config
+                UPDATE quiz_rewards_configs
                 SET winner_role_id = ${role.id}, updated_at = NOW()
                 WHERE guild_id = ${session.guildId}
               `;
