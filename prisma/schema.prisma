@@ -1236,6 +1236,7 @@ model SqlClinicTask {
   difficulty     String           @default("beginner") @db.VarChar(20)
   expectedSql    String           @map("expected_sql") @db.Text
   expectedResult Json             @map("expected_result")
+  hint           String?          @db.Text
   points         Int              @default(1)
   sortOrder      Int              @default(0) @map("sort_order")
   createdAt      DateTime?        @map("created_at") @db.Timestamptz
@@ -1280,6 +1281,69 @@ model SqlClinicChallenge {
 
   @@index([isActive])
   @@map("sql_clinic_challenges")
+}
+
+// ==================== SQL Challenge (interactive MP) ====================
+
+model SqlChallengeSession {
+  id           BigInt   @id @default(autoincrement())
+  guildId      String   @map("guild_id") @db.VarChar(20)
+  datasetId    BigInt   @map("dataset_id")
+  title        String   @db.VarChar(255)
+  channelId    String   @map("channel_id") @db.VarChar(20)
+  questionsJson String  @map("questions_json") @db.Text // JSON array of task IDs in order
+  totalQuestions Int     @default(15) @map("total_questions")
+  status       String   @default("active") @db.VarChar(20) // active, completed
+  startedAt    DateTime @default(now()) @map("started_at") @db.Timestamptz
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  participants SqlChallengeParticipant[]
+
+  @@index([guildId, status])
+  @@map("sql_challenge_sessions")
+}
+
+model SqlChallengeParticipant {
+  id              BigInt   @id @default(autoincrement())
+  sessionId       BigInt   @map("session_id")
+  userDiscordId   String   @map("user_discord_id") @db.VarChar(20)
+  username        String   @db.VarChar(100)
+  guildId         String   @map("guild_id") @db.VarChar(20)
+  currentQuestion Int      @default(1) @map("current_question")
+  totalPoints     Int      @default(0) @map("total_points")
+  hintsUsed       Int      @default(0) @map("hints_used")
+  isFinished      Boolean  @default(false) @map("is_finished")
+  joinedAt        DateTime @default(now()) @map("joined_at") @db.Timestamptz
+  lastActivityAt  DateTime? @map("last_activity_at") @db.Timestamptz
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  session  SqlChallengeSession @relation(fields: [sessionId], references: [id])
+  responses SqlChallengeResponse[]
+
+  @@unique([sessionId, userDiscordId])
+  @@index([userDiscordId])
+  @@map("sql_challenge_participants")
+}
+
+model SqlChallengeResponse {
+  id             BigInt   @id @default(autoincrement())
+  participantId  BigInt   @map("participant_id")
+  taskId         BigInt   @map("task_id")
+  questionNumber Int      @map("question_number")
+  submittedSql   String   @map("submitted_sql") @db.Text
+  isCorrect      Boolean  @default(false) @map("is_correct")
+  pointsEarned   Int      @default(0) @map("points_earned")
+  hintsUsed      Int      @default(0) @map("hints_used")
+  submittedAt    DateTime @default(now()) @map("submitted_at") @db.Timestamptz
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz
+
+  participant SqlChallengeParticipant @relation(fields: [participantId], references: [id])
+
+  @@index([participantId])
+  @@map("sql_challenge_responses")
 }
 
 // ==================== Monitoring & System ====================

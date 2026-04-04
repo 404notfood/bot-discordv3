@@ -1,20 +1,14 @@
-import { Message, AttachmentBuilder, ChannelType } from 'discord.js';
+import { Message, ChannelType } from 'discord.js';
 import { db } from '../services/database';
 import { log } from '../services/logger';
+import { SqlSandbox } from '../services/sql-sandbox';
 import { BotEvent } from '../types/event';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as mysql from 'mariadb';
 
 // ---------------------------------------------------------------------------
 // Utility functions
 // ---------------------------------------------------------------------------
-
-function toMysqlDateTime(d: Date): string {
-  const offset = d.getTimezoneOffset() * 60000;
-  const localTime = new Date(d.getTime() - offset);
-  return localTime.toISOString().slice(0, 19).replace('T', ' ');
-}
 
 function parseLabels(content: string): string[] {
   const cleaned = content.trim().toUpperCase();
@@ -84,15 +78,62 @@ async function getRunningSession(guildId: string, channelId: string) {
 // SQL Challenge - Join
 // ---------------------------------------------------------------------------
 
+/** Load schema SQL for a dataset (from DB field or file) */
+function loadSchemaSql(dataset: any): string {
+  if (dataset.schema_sql) return dataset.schema_sql;
+  const filePath = path.join(process.cwd(), 'prisma/datasets', `${dataset.slug}.sql`);
+  if (fs.existsSync(filePath)) {
+    return fs.readFileSync(filePath, 'utf-8');
+  }
+  throw new Error(`Schema SQL introuvable pour le dataset "${dataset.slug}"`);
+}
+
+/** Parse CREATE TABLE statements from a schema SQL string and build a readable summary */
+function buildSchemaDescription(schemaSql: string): string {
+  const tableRegex = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\(/gi;
+  const tables: string[] = [];
+  let match;
+  while ((match = tableRegex.exec(schemaSql)) !== null) {
+    const tableName = match[1];
+    let depth = 1;
+    let i = match.index + match[0].length;
+    while (i < schemaSql.length && depth > 0) {
+      if (schemaSql[i] === '(') depth++;
+      if (schemaSql[i] === ')') depth--;
+      i++;
+    }
+    const body = schemaSql.substring(match.index + match[0].length, i - 1);
+    // Parse columns (skip FOREIGN KEY, PRIMARY KEY, CHECK constraints)
+    const parts: string[] = [];
+    let current = '';
+    let pd = 0;
+    for (const ch of body) {
+      if (ch === '(') pd++;
+      if (ch === ')') pd--;
+      if (ch === ',' && pd === 0) { parts.push(current.trim()); current = ''; }
+      else current += ch;
+    }
+    if (current.trim()) parts.push(current.trim());
+    const cols = parts
+      .filter((c) => !c.startsWith('FOREIGN') && !c.startsWith('PRIMARY') && !c.startsWith('CHECK') && !c.startsWith('UNIQUE') && c.length > 0)
+      .map((c) => { const tokens = c.split(/\s+/); return `  ${tokens[0]} ${tokens[1] || ''}`; })
+      .join('\n');
+    tables.push(`**${tableName}**\n\`\`\`\n${cols}\n\`\`\``);
+  }
+  return tables.join('\n\n');
+}
+
 async function handleChallengeJoin(message: Message) {
   try {
     const prisma = db.client;
 
-    // Check for active session
+    // Check for active session in any guild
     const activeSessions = await prisma.$queryRaw<any[]>`
-      SELECT * FROM sql_challenge_sessions
-      WHERE status = 'active'
-      ORDER BY id DESC
+      SELECT s.*, d.slug as dataset_slug, d.name as dataset_name, d.description as dataset_description, d.schema_sql
+      FROM sql_challenge_sessions s
+      JOIN sql_clinic_datasets d ON d.id = s.dataset_id
+      WHERE s.status = 'active'
+      ORDER BY s.id DESC
       LIMIT 1
     `;
 
@@ -100,88 +141,69 @@ async function handleChallengeJoin(message: Message) {
 
     if (!activeSession) {
       return message.reply(
-        "Aucun SQL Challenge n'est actuellement actif. Attendez qu'un administrateur lance une nouvelle semaine !"
+        "Aucun SQL Challenge n'est actuellement actif. Attendez qu'un administrateur en lance un avec `/sql challenge start` !"
       );
     }
 
     // Check if user already enrolled
-    const existingUsers = await prisma.$queryRaw<any[]>`
-      SELECT * FROM sql_challenge_users
-      WHERE (user_discord_id = ${message.author.id} OR user_discord_username = ${message.author.username})
+    const existingParticipants = await prisma.$queryRaw<any[]>`
+      SELECT * FROM sql_challenge_participants
+      WHERE user_discord_id = ${message.author.id}
         AND session_id = ${activeSession.id}
       LIMIT 1
     `;
 
-    if (existingUsers.length > 0) {
+    if (existingParticipants.length > 0) {
       return message.reply(
         'Vous etes deja inscrit au SQL Challenge ! Ecrivez-moi en prive pour continuer.'
       );
     }
 
     // Enroll user
-    const displayName =
-      message.member?.displayName || message.author.username;
+    const displayName = message.member?.displayName || message.author.username;
     await prisma.$executeRaw`
-      INSERT INTO sql_challenge_users (user_discord_id, username, user_discord_username, guild_id, session_id, current_question, total_points)
-      VALUES (${message.author.id}, ${displayName}, ${message.author.username}, ${message.guildId || ''}, ${activeSession.id}, 1, 0)
+      INSERT INTO sql_challenge_participants (session_id, user_discord_id, username, guild_id, current_question, total_points, hints_used, is_finished, joined_at, created_at, updated_at)
+      VALUES (${activeSession.id}, ${message.author.id}, ${displayName}, ${message.guildId || ''}, 1, 0, 0, false, NOW(), NOW(), NOW())
     `;
 
     // Public reply
     await message.reply(
-      `**${displayName}** rejoint le SQL Challenge !\nCheck tes DMs pour la base de donnees et la premiere question.`
+      `**${displayName}** rejoint le SQL Challenge !\nCheck tes DMs pour le schema et la premiere question.`
     );
 
-    // Send database and instructions via DM
+    // Send schema and instructions via DM
     try {
-      const dbFilePath = path.join(
-        __dirname,
-        '../../sql_challenge_discord/BDD_CLINIC.sql'
-      );
+      let schemaSql: string;
+      try {
+        schemaSql = loadSchemaSql(activeSession);
+      } catch {
+        schemaSql = '';
+      }
 
-      const instructionsMessage = `**Base de donnees SQL Challenge - Clinique Medicale**
+      const schemaDesc = schemaSql ? buildSchemaDescription(schemaSql) : '*Schema non disponible*';
 
-**6 Tables disponibles :**
-- \`patient\` - Informations patients (nom, ville, date_naissance, mutuelle...)
-- \`medecin\` - Medecins et specialites (cardiologue, pediatre...)
-- \`service\` - Services hospitaliers (cardiologie, urgences...)
-- \`consultation\` - Consultations avec prix et duree
-- \`medicament\` - Medicaments avec stock et prix
-- \`prescription\` - Medicaments prescrits
+      const instructionsMessage = `**SQL Challenge — ${activeSession.dataset_name || activeSession.title}**
 
-**Installation :**
-1. Importe ce fichier dans MySQL/MariaDB
-2. Utilise la base \`CLINIC\` pour tes requetes
-3. **Toutes tes reponses doivent etre en MP ici !**
+${activeSession.dataset_description || ''}
+
+**Schema des tables :**
+${schemaDesc}
 
 **Commandes MP disponibles :**
-- \`!reponse SELECT * FROM patient;\` - Soumettre ta requete SQL
-- \`!indice\` - Demander un indice (-1 point)
-- \`!sql-progress\` - Voir ta progression actuelle
+- \`!reponse SELECT ...\` — Soumettre ta requete SQL
+- \`!indice\` — Demander un indice (-2 points)
+- \`!sql-progress\` — Voir ta progression actuelle
 
 **Premiere question arrive dans 30 secondes...**`;
 
-      if (fs.existsSync(dbFilePath)) {
-        const attachment = new AttachmentBuilder(dbFilePath, {
-          name: 'BDD_CLINIC.sql',
-        });
-        await message.author.send({
-          content: instructionsMessage,
-          files: [attachment],
-        });
-      } else {
-        await message.author.send({ content: instructionsMessage });
-        log.warn('SQL challenge DB file not found', { path: dbFilePath });
-      }
+      await message.author.send({ content: instructionsMessage });
 
       // Send first question after 30 seconds
       setTimeout(async () => {
         await sendQuestionToUser(message.author, activeSession, 1);
       }, 30000);
     } catch (dmError) {
-      log.error('Error sending DM', {
-        error: dmError,
-        userId: message.author.id,
-      });
+      log.error('Error sending DM', { error: dmError, userId: message.author.id });
       await message.reply(
         "Impossible d'envoyer les instructions en MP. Verifiez que vos DMs sont ouverts."
       );
@@ -202,29 +224,44 @@ async function sendQuestionToUser(
   questionNumber: number
 ) {
   try {
-    const questions = JSON.parse(session.questions_data as string);
-    const question = questions[questionNumber - 1];
+    const prisma = db.client;
 
-    if (!question) {
+    // Get task IDs from session questions_json
+    const taskIds: number[] = JSON.parse(session.questions_json || session.questionsJson || '[]');
+    const taskId = taskIds[questionNumber - 1];
+
+    if (!taskId) {
+      return user.send(`Bravo ! Tu as termine toutes les questions du challenge !`);
+    }
+
+    // Load the task from sql_clinic_tasks
+    const tasks = await prisma.$queryRaw<any[]>`
+      SELECT id, slug, title, description, difficulty, points, hint
+      FROM sql_clinic_tasks
+      WHERE id = ${taskId}
+      LIMIT 1
+    `;
+    const task = tasks[0];
+
+    if (!task) {
       return user.send('Question introuvable.');
     }
 
-    const questionMessage = `**Question ${questionNumber}/20** - Semaine ${session.week_number}
+    const totalQuestions = taskIds.length;
+    const diffLabel = task.difficulty === 'beginner' ? '🟢 Debutant' : task.difficulty === 'intermediate' ? '🟡 Intermediaire' : '🔴 Avance';
 
-**${question.title}**
+    const questionMessage = `**Question ${questionNumber}/${totalQuestions}** — ${session.title || 'SQL Challenge'}
 
-**Enonce :** ${question.question}
+**${task.title}** ${diffLabel}
+
+**Enonce :** ${task.description}
 
 **Commandes (MP uniquement) :**
-- \`!reponse SELECT ...\` - Soumettre ta requete SQL
-- \`!indice\` - Demander un indice (-1 point)
-- \`!sql-progress\` - Voir ta progression
+- \`!reponse SELECT ...\` — Soumettre ta requete SQL
+- \`!indice\` — Demander un indice (-2 points)
+- \`!sql-progress\` — Voir ta progression
 
-**Rappel du format :**
-- \`!reponse SELECT * FROM patient;\`
-- \`!reponse SELECT nom FROM medecin WHERE specialite = 'CARDIOLOGUE';\`
-
-**10 points par question** - **Penalite indices :** -1 point par indice utilise`;
+**${task.points} points par question** — **Penalite indices :** -2 points par indice`;
 
     await user.send(questionMessage);
   } catch (error) {
@@ -240,72 +277,88 @@ async function handleSqlChallengeIndice(message: Message) {
   try {
     const prisma = db.client;
 
-    log.debug('handleSqlChallengeIndice called', {
-      username: message.author.username,
-    });
+    log.debug('handleSqlChallengeIndice called', { username: message.author.username });
 
-    // Get user and active session
-    const userInfo = await prisma.$queryRaw<any[]>`
-      SELECT scu.id, scu.user_discord_id, scu.username, scu.user_discord_username, scu.guild_id, scu.session_id,
-             scu.current_question, scu.total_points, scu.is_finished, scu.joined_at, scu.last_activity,
-             scs.week_number, scs.title, scs.description, scs.difficulty, scs.status,
-             scs.start_date, scs.end_date, scs.questions_data, scs.created_at as session_created_at
-      FROM sql_challenge_users scu
-      JOIN sql_challenge_sessions scs ON scs.id = scu.session_id
-      WHERE (scu.user_discord_id = ${message.author.id} OR scu.user_discord_username = ${message.author.username})
-        AND scs.status = 'active'
-      ORDER BY scu.id DESC LIMIT 1
+    // Get participant and active session
+    const participantInfo = await prisma.$queryRaw<any[]>`
+      SELECT p.id, p.session_id, p.current_question, p.total_points, p.hints_used, p.is_finished,
+             s.title, s.questions_json, s.total_questions, s.dataset_id
+      FROM sql_challenge_participants p
+      JOIN sql_challenge_sessions s ON s.id = p.session_id
+      WHERE p.user_discord_id = ${message.author.id}
+        AND s.status = 'active'
+      ORDER BY p.id DESC LIMIT 1
     `;
 
-    const user = userInfo[0];
+    const participant = participantInfo[0];
 
-    log.debug('User info found', { id: user?.id, username: user?.username });
-
-    if (!user || !user.id) {
+    if (!participant || !participant.id) {
       return message.reply(
-        "Vous n'etes pas inscrit au challenge actuel ou aucun challenge n'est actif. Tapez `!challenge` dans un canal pour vous inscrire."
+        "Vous n'etes pas inscrit au challenge actuel. Tapez `!challenge-sql` dans un canal pour vous inscrire."
       );
     }
 
-    if (user.is_finished) {
-      return message.reply(
-        'Vous avez deja termine cette semaine ! Attendez la prochaine semaine.'
-      );
+    if (participant.is_finished) {
+      return message.reply('Vous avez deja termine ce challenge !');
     }
 
-    // Get current question
-    const questions = JSON.parse(user.questions_data);
-    const currentQ = questions[user.current_question - 1];
+    // Get current task from questions_json
+    const taskIds: number[] = JSON.parse(participant.questions_json);
+    const currentTaskId = taskIds[participant.current_question - 1];
 
-    if (!currentQ) {
+    if (!currentTaskId) {
       return message.reply('Question introuvable.');
     }
 
-    // Check hints used for current question
-    const hintsCount = await prisma.$queryRaw<any[]>`
-      SELECT COUNT(*) as count FROM sql_challenge_hints
-      WHERE user_id = ${user.id} AND question_number = ${user.current_question}
+    // Load the task hint
+    const tasks = await prisma.$queryRaw<any[]>`
+      SELECT id, hint FROM sql_clinic_tasks WHERE id = ${currentTaskId} LIMIT 1
     `;
-    const hintsUsedResult = hintsCount[0]?.count || 0;
+    const task = tasks[0];
 
-    if (hintsUsedResult >= 3) {
+    if (!task || !task.hint) {
+      return message.reply("Aucun indice disponible pour cette question.");
+    }
+
+    // Check how many hints already used for this question (from responses table)
+    const existingResponses = await prisma.$queryRaw<any[]>`
+      SELECT hints_used FROM sql_challenge_responses
+      WHERE participant_id = ${participant.id} AND question_number = ${participant.current_question}
+      ORDER BY id DESC LIMIT 1
+    `;
+    const currentHintsForQuestion = existingResponses[0]?.hints_used || 0;
+
+    if (currentHintsForQuestion >= 1) {
       return message.reply(
-        'Vous avez deja utilise tous vos indices pour cette question (3 max).'
+        `Vous avez deja utilise l'indice pour cette question.\n\n**Rappel de l'indice :** ${task.hint}`
       );
     }
 
-    const nextHintLevel = hintsUsedResult + 1;
-    const hint = currentQ.hints[nextHintLevel - 1];
-
-    // Record hint usage
+    // Record hint usage: update participant hints_used global counter
     await prisma.$executeRaw`
-      INSERT INTO sql_challenge_hints (user_id, session_id, question_number, hint_level)
-      VALUES (${user.id}, ${user.session_id}, ${user.current_question}, ${nextHintLevel})
+      UPDATE sql_challenge_participants
+      SET hints_used = hints_used + 1, last_activity_at = NOW(), updated_at = NOW()
+      WHERE id = ${participant.id}
     `;
 
-    const hintCost = 1;
+    // Also track hints for the current question in responses (create a placeholder if needed)
+    const hasResponse = existingResponses.length > 0;
+    if (!hasResponse) {
+      await prisma.$executeRaw`
+        INSERT INTO sql_challenge_responses (participant_id, task_id, question_number, submitted_sql, is_correct, points_earned, hints_used, submitted_at, created_at)
+        VALUES (${participant.id}, ${currentTaskId}, ${participant.current_question}, '', false, 0, 1, NOW(), NOW())
+      `;
+    } else {
+      await prisma.$executeRaw`
+        UPDATE sql_challenge_responses
+        SET hints_used = hints_used + 1
+        WHERE participant_id = ${participant.id} AND question_number = ${participant.current_question}
+          AND id = (SELECT MAX(id) FROM sql_challenge_responses WHERE participant_id = ${participant.id} AND question_number = ${participant.current_question})
+      `;
+    }
+
     return message.reply(
-      `**Indice ${nextHintLevel}/3 :** ${hint}\n\n-${hintCost} point deduit`
+      `**Indice :** ${task.hint}\n\n-2 points deduits sur cette question.`
     );
   } catch (error) {
     log.error('Error in handleSqlChallengeIndice', { error });
@@ -333,54 +386,54 @@ async function handleSqlChallengeReponse(message: Message, sql: string) {
       );
     }
 
-    // Security check: only SELECT queries allowed
-    const forbidden =
-      /\b(insert|update|delete|alter|drop|truncate|create|replace|grant|revoke|exec|execute)\b/i;
-    if (forbidden.test(sql)) {
-      return message.reply('Seules les requetes SELECT sont autorisees.');
-    }
-
-    // Get user and session
-    const userInfo = await prisma.$queryRaw<any[]>`
-      SELECT scu.id, scu.user_discord_id, scu.username, scu.user_discord_username, scu.guild_id, scu.session_id,
-             scu.current_question, scu.total_points, scu.is_finished, scu.joined_at, scu.last_activity,
-             scs.week_number, scs.title, scs.description, scs.difficulty, scs.status,
-             scs.start_date, scs.end_date, scs.questions_data, scs.created_at as session_created_at
-      FROM sql_challenge_users scu
-      JOIN sql_challenge_sessions scs ON scs.id = scu.session_id
-      WHERE (scu.user_discord_id = ${message.author.id} OR scu.user_discord_username = ${message.author.username})
-        AND scs.status = 'active'
-      ORDER BY scu.id DESC LIMIT 1
+    // Get participant and session + dataset
+    const participantInfo = await prisma.$queryRaw<any[]>`
+      SELECT p.id, p.session_id, p.user_discord_id, p.username, p.guild_id,
+             p.current_question, p.total_points, p.hints_used, p.is_finished,
+             s.title, s.questions_json, s.total_questions, s.dataset_id, s.channel_id,
+             d.slug as dataset_slug, d.schema_sql, d.name as dataset_name
+      FROM sql_challenge_participants p
+      JOIN sql_challenge_sessions s ON s.id = p.session_id
+      JOIN sql_clinic_datasets d ON d.id = s.dataset_id
+      WHERE p.user_discord_id = ${message.author.id}
+        AND s.status = 'active'
+      ORDER BY p.id DESC LIMIT 1
     `;
 
-    const user = userInfo[0];
+    const participant = participantInfo[0];
 
-    log.debug('User info found', { id: user?.id, username: user?.username });
-
-    if (!user || !user.id) {
+    if (!participant || !participant.id) {
       return message.reply(
-        "Vous n'etes pas inscrit au challenge actuel. Tapez `!challenge` dans un canal pour vous inscrire."
+        "Vous n'etes pas inscrit au challenge actuel. Tapez `!challenge-sql` dans un canal pour vous inscrire."
       );
     }
 
-    if (user.is_finished) {
-      return message.reply(
-        'Vous avez deja termine cette semaine ! Attendez la prochaine semaine.'
-      );
+    if (participant.is_finished) {
+      return message.reply('Vous avez deja termine ce challenge !');
     }
 
-    // Get current question
-    const questions = JSON.parse(user.questions_data);
-    const currentQ = questions[user.current_question - 1];
+    // Get current task
+    const taskIds: number[] = JSON.parse(participant.questions_json);
+    const currentTaskId = taskIds[participant.current_question - 1];
 
-    if (!currentQ) {
+    if (!currentTaskId) {
+      return message.reply('Question introuvable.');
+    }
+
+    const tasks = await prisma.$queryRaw<any[]>`
+      SELECT id, slug, title, expected_sql, points, hint
+      FROM sql_clinic_tasks WHERE id = ${currentTaskId} LIMIT 1
+    `;
+    const task = tasks[0];
+
+    if (!task) {
       return message.reply('Question introuvable.');
     }
 
     // Check if already answered correctly
     const alreadyAnswered = await prisma.$queryRaw<any[]>`
       SELECT * FROM sql_challenge_responses
-      WHERE user_id = ${user.id} AND question_number = ${user.current_question} AND is_correct = 1
+      WHERE participant_id = ${participant.id} AND question_number = ${participant.current_question} AND is_correct = true
       LIMIT 1
     `;
 
@@ -390,162 +443,151 @@ async function handleSqlChallengeReponse(message: Message, sql: string) {
       );
     }
 
-    // Test the user's query against expected results
-    const isCorrect = await testUserQuery(sql, currentQ);
+    // Load schema and validate using SQLite sandbox
+    let schemaSql: string;
+    try {
+      schemaSql = loadSchemaSql(participant);
+    } catch {
+      return message.reply('Erreur: schema du dataset introuvable.');
+    }
 
-    if (isCorrect) {
-      // Calculate position and hint penalty
-      const position = await calculateUserPosition(
-        user.session_id,
-        user.current_question
-      );
-      const hintsCount = await prisma.$queryRaw<any[]>`
-        SELECT COUNT(*) as count FROM sql_challenge_hints
-        WHERE user_id = ${user.id} AND question_number = ${user.current_question}
-      `;
-      const hintsUsed = hintsCount[0]?.count || 0;
+    const validation = SqlSandbox.validate(schemaSql, sql, task.expected_sql);
 
-      const basePoints = 10;
-      let hintPenalty = 0;
-      if (hintsUsed === 1) hintPenalty = 1;
-      else if (hintsUsed === 2) hintPenalty = 2;
-      else if (hintsUsed >= 3) hintPenalty = 3;
+    // Check hints used for this question
+    const hintResponses = await prisma.$queryRaw<any[]>`
+      SELECT COALESCE(MAX(hints_used), 0) as hints FROM sql_challenge_responses
+      WHERE participant_id = ${participant.id} AND question_number = ${participant.current_question}
+    `;
+    const hintsUsed = Number(hintResponses[0]?.hints || 0);
+
+    if (validation.success) {
+      const basePoints = task.points || 10;
+      const hintPenalty = hintsUsed * 2;
       const finalPoints = Math.max(0, basePoints - hintPenalty);
 
       // Record correct response
       await prisma.$executeRaw`
-        INSERT INTO sql_challenge_responses
-        (user_id, session_id, question_number, submitted_sql, is_correct, points_earned, hints_used, position_rank)
-        VALUES (${user.id}, ${user.session_id}, ${user.current_question}, ${sql}, 1, ${finalPoints}, ${hintsUsed}, ${position})
+        INSERT INTO sql_challenge_responses (participant_id, task_id, question_number, submitted_sql, is_correct, points_earned, hints_used, submitted_at, created_at)
+        VALUES (${participant.id}, ${currentTaskId}, ${participant.current_question}, ${sql}, true, ${finalPoints}, ${hintsUsed}, NOW(), NOW())
       `;
 
-      // Update user total points and advance question
+      // Update participant: add points, advance question
+      const nextQuestion = participant.current_question + 1;
+      const isLastQuestion = participant.current_question >= taskIds.length;
+
       await prisma.$executeRaw`
-        UPDATE sql_challenge_users
-        SET total_points = total_points + ${finalPoints}, current_question = current_question + 1
-        WHERE id = ${user.id}
+        UPDATE sql_challenge_participants
+        SET total_points = total_points + ${finalPoints},
+            current_question = ${nextQuestion},
+            is_finished = ${isLastQuestion},
+            last_activity_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${participant.id}
       `;
 
-      const hintText =
-        hintsUsed > 0
-          ? ` (${hintsUsed} indice${hintsUsed > 1 ? 's' : ''} utilise${
-              hintsUsed > 1 ? 's' : ''
-            })`
-          : '';
-      await message.reply(
-        `**Correct !** Tu gagnes **${finalPoints} points**${hintText}\n\n**Question ${user.current_question}** terminee ! Prochaine question envoyee...`
-      );
+      const hintText = hintsUsed > 0
+        ? ` (${hintsUsed} indice${hintsUsed > 1 ? 's' : ''} utilise${hintsUsed > 1 ? 's' : ''})`
+        : '';
 
-      // Send next question or finish challenge
-      if (user.current_question < 20) {
-        setTimeout(async () => {
-          await sendQuestionToUser(
-            message.author,
-            user,
-            user.current_question + 1
-          );
-        }, 3000);
-      } else {
-        // Mark as finished
-        await prisma.$executeRaw`
-          UPDATE sql_challenge_users SET is_finished = 1 WHERE id = ${user.id}
-        `;
+      if (isLastQuestion) {
+        // Challenge finished!
+        const finalTotalPoints = participant.total_points + finalPoints;
 
         // Calculate finish position
-        const finishPositionResult = await prisma.$queryRaw<any[]>`
-          SELECT COUNT(*) + 1 as position FROM sql_challenge_users
-          WHERE session_id = ${user.session_id} AND is_finished = 1 AND id != ${user.id}
+        const finishPosResult = await prisma.$queryRaw<any[]>`
+          SELECT COUNT(*) as cnt FROM sql_challenge_participants
+          WHERE session_id = ${participant.session_id} AND is_finished = true AND id != ${participant.id}
         `;
-        const finishPosition = finishPositionResult[0]?.position || 1;
-
-        const finalTotalPoints = user.total_points + finalPoints;
-
-        // Points ranking
-        const pointsRankingResult = await prisma.$queryRaw<any[]>`
-          SELECT COUNT(*) + 1 as rank FROM sql_challenge_users
-          WHERE session_id = ${user.session_id} AND is_finished = 1
-            AND total_points > ${finalTotalPoints} AND id != ${user.id}
-        `;
-        const pointsRanking = pointsRankingResult[0]?.rank || 1;
+        const finishPosition = (Number(finishPosResult[0]?.cnt) || 0) + 1;
 
         // Get top 5
         const top5 = await prisma.$queryRaw<any[]>`
           SELECT username, total_points
-          FROM sql_challenge_users
-          WHERE session_id = ${user.session_id} AND is_finished = 1
+          FROM sql_challenge_participants
+          WHERE session_id = ${participant.session_id}
           ORDER BY total_points DESC
           LIMIT 5
         `;
 
-        // Private completion message
+        // Private congratulation
         await message.reply(
-          `**Felicitations !** Vous avez termine la Semaine ${user.week_number} avec **${finalTotalPoints} points** !`
+          `**Correct !** +**${finalPoints} points**${hintText}\n\n` +
+          `**Felicitations !** Tu as termine le SQL Challenge avec **${finalTotalPoints} points** !\n` +
+          `Tu es le **${finishPosition}${finishPosition === 1 ? 'er' : 'eme'}** a finir !`
         );
 
-        // Public announcement in the guild channel
+        // Public announcement in the challenge channel
         try {
-          const configs = await prisma.$queryRaw<any[]>`
-            SELECT * FROM sql_challenge_configs WHERE guild_id = ${user.guild_id} LIMIT 1
-          `;
-          const config = configs[0];
-
-          if (config && message.client.guilds) {
-            const guild = await message.client.guilds.fetch(user.guild_id);
+          if (participant.guild_id && participant.channel_id) {
+            const guild = await message.client.guilds.fetch(participant.guild_id);
             if (guild) {
-              const channelId =
-                config.announce_channel_id || config.challenge_channel_id;
-              const channel = await guild.channels
-                .fetch(channelId)
-                .catch(() => null);
+              const channel = await guild.channels.fetch(participant.channel_id).catch(() => null);
+              if (channel && channel.isTextBased() && 'send' in channel) {
+                const displayName = guild.members.cache.get(message.author.id)?.displayName || message.author.username;
 
-              if (channel && channel.isTextBased()) {
-                const displayName =
-                  guild.members.cache.get(message.author.id)?.displayName ||
-                  message.author.username;
-
-                let publicMessage = `**${displayName}** est le **${finishPosition}${
-                  finishPosition === 1 ? 'er' : 'eme'
-                }** a finir ce SQL Challenge avec **${finalTotalPoints} points** !\n`;
-                publicMessage += `Il est donc en **${pointsRanking}${
-                  pointsRanking === 1 ? 'ere' : 'eme'
-                } position** au classement par points.\n\n`;
+                let publicMsg = `🏁 **${displayName}** est le **${finishPosition}${finishPosition === 1 ? 'er' : 'eme'}** a finir le SQL Challenge avec **${finalTotalPoints} points** !\n\n`;
 
                 if (top5.length > 0) {
-                  publicMessage += `**Top 5 actuel :**\n`;
+                  publicMsg += `**Top 5 actuel :**\n`;
                   top5.forEach((u: any, index: number) => {
-                    const medal =
-                      index === 0
-                        ? '1.'
-                        : index === 1
-                        ? '2.'
-                        : index === 2
-                        ? '3.'
-                        : `${index + 1}.`;
-                    publicMessage += `${medal} **${u.username}** - ${u.total_points} pts\n`;
+                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**${index + 1}.**`;
+                    publicMsg += `${medal} **${u.username}** — ${u.total_points} pts\n`;
                   });
                 }
 
-                if ('send' in channel) {
-                  await channel.send(publicMessage);
-                }
+                await (channel as any).send(publicMsg);
               }
             }
           }
-        } catch (error) {
-          log.error('Error sending public announcement', { error });
+        } catch (err) {
+          log.error('Error sending public announcement', { error: err });
         }
+      } else {
+        // Send next question
+        await message.reply(
+          `**Correct !** +**${finalPoints} points**${hintText}\n\n` +
+          `**Question ${participant.current_question}** terminee ! Prochaine question dans 3 secondes...`
+        );
+
+        setTimeout(async () => {
+          await sendQuestionToUser(message.author, participant, nextQuestion);
+        }, 3000);
       }
     } else {
-      // Incorrect response
+      // Incorrect response — record it
       await prisma.$executeRaw`
-        INSERT INTO sql_challenge_responses
-        (user_id, session_id, question_number, submitted_sql, is_correct, points_earned, hints_used)
-        VALUES (${user.id}, ${user.session_id}, ${user.current_question}, ${sql}, 0, 0, 0)
+        INSERT INTO sql_challenge_responses (participant_id, task_id, question_number, submitted_sql, is_correct, points_earned, hints_used, submitted_at, created_at)
+        VALUES (${participant.id}, ${currentTaskId}, ${participant.current_question}, ${sql}, false, 0, ${hintsUsed}, NOW(), NOW())
       `;
 
-      await message.reply(
-        'Reponse incorrecte. Reessaye ! Tape `!indice` pour un indice (-1 point)'
-      );
+      // Update last activity
+      await prisma.$executeRaw`
+        UPDATE sql_challenge_participants SET last_activity_at = NOW(), updated_at = NOW() WHERE id = ${participant.id}
+      `;
+
+      let errorMsg = 'Reponse incorrecte. Reessaye !';
+      if (validation.error) {
+        errorMsg += `\n\n**Erreur SQL :**\n\`\`\`\n${validation.error}\n\`\`\``;
+      } else {
+        // Give hints about what's wrong
+        const userRows = validation.userResult?.rows.length || 0;
+        const expectedRows = validation.expectedResult?.rows.length || 0;
+        const userCols = validation.userResult?.columns.length || 0;
+        const expectedCols = validation.expectedResult?.columns.length || 0;
+
+        if (userCols !== expectedCols) {
+          errorMsg += `\n📏 **Colonnes :** vous avez ${userCols}, attendu ${expectedCols}`;
+        }
+        if (userRows !== expectedRows) {
+          errorMsg += `\n📋 **Lignes :** vous avez ${userRows}, attendu ${expectedRows}`;
+        }
+        if (userCols === expectedCols && userRows === expectedRows) {
+          errorMsg += `\n🔍 Le nombre de colonnes et lignes est correct, mais les **valeurs** different.`;
+        }
+      }
+      errorMsg += `\n\nTape \`!indice\` pour un indice (-2 points)`;
+
+      await message.reply(errorMsg);
     }
   } catch (error) {
     log.error('Error in handleSqlChallengeReponse', { error });
@@ -561,27 +603,33 @@ async function handleSqlProgress(message: Message) {
   try {
     const prisma = db.client;
 
-    const userInfos = await prisma.$queryRaw<any[]>`
-      SELECT scu.*, scs.week_number, scs.title
-      FROM sql_challenge_users scu
-      JOIN sql_challenge_sessions scs ON scs.id = scu.session_id
-      WHERE scu.user_discord_id = ${message.author.id} AND scs.status = 'active'
-      ORDER BY scu.id DESC LIMIT 1
+    const participantInfos = await prisma.$queryRaw<any[]>`
+      SELECT p.current_question, p.total_points, p.hints_used, p.is_finished,
+             s.title, s.total_questions
+      FROM sql_challenge_participants p
+      JOIN sql_challenge_sessions s ON s.id = p.session_id
+      WHERE p.user_discord_id = ${message.author.id} AND s.status = 'active'
+      ORDER BY p.id DESC LIMIT 1
     `;
 
-    const userInfo = userInfos[0];
+    const info = participantInfos[0];
 
-    if (!userInfo) {
+    if (!info) {
       return message.reply("Vous n'etes pas inscrit au challenge actuel.");
     }
 
-    const progress = `**Ta progression - ${userInfo.title}**
+    const questionDisplay = info.is_finished
+      ? `${info.total_questions}/${info.total_questions}`
+      : `${info.current_question}/${info.total_questions}`;
 
-**Question actuelle :** ${userInfo.current_question}/20
-**Points totaux :** ${userInfo.total_points}
-**Statut :** ${userInfo.is_finished ? 'Termine' : 'En cours'}
+    const progress = `**Ta progression — ${info.title}**
 
-${!userInfo.is_finished ? 'Continue comme ca !' : 'Bravo pour avoir termine !'}`;
+**Question actuelle :** ${questionDisplay}
+**Points totaux :** ${info.total_points}
+**Indices utilises :** ${info.hints_used}
+**Statut :** ${info.is_finished ? '✅ Termine' : '⏳ En cours'}
+
+${!info.is_finished ? 'Continue comme ca !' : 'Bravo pour avoir termine !'}`;
 
     return message.reply(progress);
   } catch (error) {
@@ -593,114 +641,11 @@ ${!userInfo.is_finished ? 'Continue comme ca !' : 'Bravo pour avoir termine !'}`
 }
 
 // ---------------------------------------------------------------------------
-// SQL Challenge - Test user query against expected result
-// ---------------------------------------------------------------------------
-
-async function testUserQuery(userSql: string, question: any): Promise<boolean> {
-  let conn: mysql.Connection | null = null;
-
-  try {
-    // Create test database connection using mariadb driver
-    conn = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      user: 'discord_test',
-      password: 'Maglit3s',
-      database: 'discord_test',
-    });
-
-    try {
-      // Execute user query
-      const userResult = await conn.query(userSql);
-
-      // Collect all solution queries to test against
-      const solutionsToTest: string[] = [];
-
-      if (question.solutions && Array.isArray(question.solutions)) {
-        question.solutions.forEach((solution: any) => {
-          if (typeof solution === 'string') {
-            solutionsToTest.push(solution);
-          } else if (solution.sql) {
-            solutionsToTest.push(solution.sql);
-          }
-        });
-      } else if (question.solution) {
-        solutionsToTest.push(question.solution);
-      }
-
-      // Compare user result with each valid solution
-      for (const solutionSql of solutionsToTest) {
-        try {
-          const correctResult = await conn.query(solutionSql);
-
-          if (JSON.stringify(userResult) === JSON.stringify(correctResult)) {
-            await conn.end();
-            return true;
-          }
-        } catch (solutionError) {
-          log.debug('Error in reference solution', { solutionError });
-          continue;
-        }
-      }
-
-      await conn.end();
-      return false;
-    } catch (userError) {
-      await conn.end();
-      log.debug('User SQL error', { userError });
-      return false;
-    }
-  } catch (connectionError) {
-    log.error('Error connecting to test database', { connectionError });
-    if (conn) {
-      await conn.end().catch(() => {});
-    }
-
-    // Fallback to text-based comparison
-    const normalize = (sql: string) =>
-      sql.toLowerCase().replace(/\s+/g, ' ').trim();
-    const normalizedUserSql = normalize(userSql);
-
-    if (question.solutions && Array.isArray(question.solutions)) {
-      return question.solutions.some((solution: any) => {
-        if (typeof solution === 'string') {
-          return normalize(solution) === normalizedUserSql;
-        } else if (solution.sql) {
-          return normalize(solution.sql) === normalizedUserSql;
-        }
-        return false;
-      });
-    } else if (question.solution) {
-      return normalize(question.solution) === normalizedUserSql;
-    }
-
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// SQL Challenge - Calculate user position for a question
-// ---------------------------------------------------------------------------
-
-async function calculateUserPosition(
-  sessionId: number,
-  questionNumber: number
-): Promise<number> {
-  const prisma = db.client;
-
-  const counts = await prisma.$queryRaw<any[]>`
-    SELECT COUNT(*) as count FROM sql_challenge_responses
-    WHERE session_id = ${sessionId} AND question_number = ${questionNumber} AND is_correct = 1
-  `;
-
-  return (counts[0]?.count || 0) + 1;
-}
-
-// ---------------------------------------------------------------------------
 // Message patterns for fast filtering
 // ---------------------------------------------------------------------------
 
 const PARTICIPE_PATTERN = /^!participe$/i;
-const CHALLENGE_PATTERN = /^!challenge$/i;
+const CHALLENGE_PATTERN = /^!challenge-sql$/i;
 const TEST_PATTERN = /^!test$/i;
 const SQL_COMMANDS_PATTERN = /^!(indice|reponse|sql-progress)/i;
 const QUIZ_ANSWER_PATTERN = /^[a-d](,[a-d])*$|^[1-4](,[1-4])*$/i;

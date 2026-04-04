@@ -358,6 +358,140 @@ async function handleSchema(interaction: ChatInputCommandInteraction): Promise<v
   await interaction.reply({ embeds: [embed], flags: 64 });
 }
 
+/** /sql challenge start — admin: launch a SQL challenge */
+async function handleChallengeStart(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { PermissionsManager } = await import('../../services/permissions');
+  if (!(await PermissionsManager.requireAdmin(interaction))) return;
+
+  const datasetSlug = interaction.options.getString('dataset', true);
+  const channel = interaction.options.getChannel('salon');
+
+  await interaction.deferReply({ flags: 64 });
+
+  // Check dataset
+  const ds = await db.client.$queryRaw<Array<any>>`
+    SELECT * FROM sql_clinic_datasets WHERE slug = ${datasetSlug} AND is_active = true LIMIT 1
+  `.then((r: any) => r[0]);
+
+  if (!ds) {
+    await interaction.editReply({ content: '❌ Dataset introuvable.' });
+    return;
+  }
+
+  // Get tasks for this dataset, ordered by difficulty
+  const tasks = await db.client.$queryRaw<Array<any>>`
+    SELECT id, slug, title, difficulty, points
+    FROM sql_clinic_tasks
+    WHERE dataset_id = ${ds.id}
+    ORDER BY sort_order ASC, id ASC
+  `;
+
+  if (tasks.length === 0) {
+    await interaction.editReply({ content: '❌ Aucun exercice disponible pour ce dataset.' });
+    return;
+  }
+
+  // Close any active session for this guild
+  await db.client.$executeRaw`
+    UPDATE sql_challenge_sessions SET status = 'completed', ended_at = NOW(), updated_at = NOW()
+    WHERE guild_id = ${interaction.guildId} AND status = 'active'
+  `;
+
+  const targetChannelId = channel?.id || interaction.channelId;
+  const taskIds = tasks.map((t: any) => Number(t.id));
+
+  // Create new session
+  await db.client.$executeRaw`
+    INSERT INTO sql_challenge_sessions (guild_id, dataset_id, title, channel_id, questions_json, total_questions, status, started_at, created_at, updated_at)
+    VALUES (${interaction.guildId}, ${ds.id}, ${`SQL Challenge — ${ds.name}`}, ${targetChannelId}, ${JSON.stringify(taskIds)}, ${tasks.length}, 'active', NOW(), NOW(), NOW())
+  `;
+
+  // Announce in channel
+  const announceChannel = channel
+    ? await interaction.client.channels.fetch(channel.id).catch(() => null)
+    : interaction.channel;
+
+  if (announceChannel && announceChannel.isTextBased() && 'send' in announceChannel) {
+    const embed = new EmbedBuilder()
+      .setColor(0x00aaff)
+      .setTitle(`🏥 SQL Challenge — ${ds.name}`)
+      .setDescription(
+        `${ds.description || ''}\n\n` +
+        `**${tasks.length} questions** à résoudre en MP avec le bot !\n\n` +
+        `**Comment participer :**\n` +
+        `Tapez \`!challenge-sql\` dans ce canal pour vous inscrire.\n` +
+        `Le bot vous enverra le schéma et les questions en MP.\n\n` +
+        `**Commandes MP :**\n` +
+        `• \`!reponse SELECT ...\` — Soumettre votre requête\n` +
+        `• \`!indice\` — Demander un indice (-2 pts)\n` +
+        `• \`!sql-progress\` — Voir votre progression`
+      )
+      .setFooter({ text: 'Bonne chance à tous !' });
+
+    await (announceChannel as any).send({ embeds: [embed] });
+  }
+
+  await interaction.editReply({ content: `✅ SQL Challenge lancé avec ${tasks.length} questions sur le dataset **${ds.name}** !` });
+}
+
+/** /sql challenge stop — admin: stop active challenge */
+async function handleChallengeStop(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { PermissionsManager } = await import('../../services/permissions');
+  if (!(await PermissionsManager.requireAdmin(interaction))) return;
+
+  await db.client.$executeRaw`
+    UPDATE sql_challenge_sessions SET status = 'completed', ended_at = NOW(), updated_at = NOW()
+    WHERE guild_id = ${interaction.guildId} AND status = 'active'
+  `;
+
+  await interaction.reply({ content: '✅ SQL Challenge arrêté.', flags: 64 });
+}
+
+/** /sql challenge stats — show challenge leaderboard */
+async function handleChallengeStats(interaction: ChatInputCommandInteraction): Promise<void> {
+  const session = await db.client.$queryRaw<Array<any>>`
+    SELECT * FROM sql_challenge_sessions
+    WHERE guild_id = ${interaction.guildId} AND status = 'active'
+    ORDER BY id DESC LIMIT 1
+  `.then((r: any) => r[0]);
+
+  if (!session) {
+    await interaction.reply({ content: '❌ Aucun SQL Challenge actif.', flags: 64 });
+    return;
+  }
+
+  const participants = await db.client.$queryRaw<Array<any>>`
+    SELECT username, total_points, current_question, is_finished, hints_used
+    FROM sql_challenge_participants
+    WHERE session_id = ${session.id}
+    ORDER BY total_points DESC, current_question DESC
+    LIMIT 15
+  `;
+
+  const totalParticipants = participants.length;
+  const finished = participants.filter((p: any) => p.is_finished).length;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x00aaff)
+    .setTitle(`📊 ${session.title}`)
+    .addFields(
+      { name: '👥 Participants', value: totalParticipants.toString(), inline: true },
+      { name: '🏁 Terminés', value: finished.toString(), inline: true },
+      { name: '📝 Questions', value: session.total_questions.toString(), inline: true },
+    );
+
+  if (participants.length > 0) {
+    const lines = participants.map((p: any, i: number) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
+      const status = p.is_finished ? '✅' : `Q${p.current_question}/${session.total_questions}`;
+      return `${medal} **${p.username}** — ${p.total_points} pts (${status})`;
+    });
+    embed.addFields({ name: '🏆 Classement', value: lines.join('\n'), inline: false });
+  }
+
+  await interaction.reply({ embeds: [embed] });
+}
+
 // ---------------------------------------------------------------------------
 // Command definition
 // ---------------------------------------------------------------------------
@@ -366,6 +500,35 @@ export default {
   data: new SlashCommandBuilder()
     .setName('sql')
     .setDescription('🎯 Entraînement et défis SQL')
+    .addSubcommandGroup((group) =>
+      group
+        .setName('challenge')
+        .setDescription('🏥 Challenge SQL interactif en MP')
+        .addSubcommand((sub) =>
+          sub
+            .setName('start')
+            .setDescription('🚀 Lancer un SQL Challenge (admin)')
+            .addStringOption((o) =>
+              o
+                .setName('dataset')
+                .setDescription('Dataset pour le challenge')
+                .setRequired(true)
+                .setAutocomplete(true)
+            )
+            .addChannelOption((o) =>
+              o
+                .setName('salon')
+                .setDescription("Canal d'annonce (optionnel)")
+                .setRequired(false)
+            )
+        )
+        .addSubcommand((sub) =>
+          sub.setName('stop').setDescription('⏹️ Arrêter le challenge actif (admin)')
+        )
+        .addSubcommand((sub) =>
+          sub.setName('stats').setDescription('📊 Classement du challenge actif')
+        )
+    )
     .addSubcommand((sub) =>
       sub
         .setName('train')
@@ -422,9 +585,19 @@ export default {
     ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const group = interaction.options.getSubcommandGroup();
     const sub = interaction.options.getSubcommand();
 
     try {
+      if (group === 'challenge') {
+        switch (sub) {
+          case 'start': await handleChallengeStart(interaction); break;
+          case 'stop': await handleChallengeStop(interaction); break;
+          case 'stats': await handleChallengeStats(interaction); break;
+        }
+        return;
+      }
+
       switch (sub) {
         case 'train':
           await handleTrain(interaction);
