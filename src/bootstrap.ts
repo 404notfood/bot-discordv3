@@ -11,6 +11,7 @@ import { BotWebSocketServer } from './services/websocket';
 import { challengeScheduler } from './services/cron-challenges';
 import { tickQuizScheduler } from './services/quiz-runner';
 import { BotApiServer } from './api';
+import { activeDevRoleService } from './services/active-dev-role';
 
 let client: BotClient;
 let wsServer: BotWebSocketServer | undefined;
@@ -113,6 +114,15 @@ export async function bootstrap(): Promise<BotClient> {
         log.error('Quiz scheduler error', { error: err.message });
       }
 
+      // Active Dev Role service (check every hour)
+      try {
+        activeDevRoleService.startInterval(client);
+        log.info('Active Dev Role service started');
+      } catch (error) {
+        const err = error as Error;
+        log.error('Active Dev Role service error', { error: err.message });
+      }
+
       // WebSocket server
       try {
         wsServer = new BotWebSocketServer(client);
@@ -168,6 +178,9 @@ export async function shutdown(signal: string): Promise<void> {
 
     // Stop challenge scheduler
     challengeScheduler.stop();
+
+    // Stop active dev role service
+    await activeDevRoleService.cleanup();
 
     // Stop temporary roles service
     await temporaryRolesService.cleanup();

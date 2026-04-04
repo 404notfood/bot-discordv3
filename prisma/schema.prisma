@@ -287,6 +287,9 @@ model GuildConfig {
   autoRoleId       String?   @map("auto_role_id") @db.VarChar(20)
   mutedRoleId      String?   @map("muted_role_id") @db.VarChar(20)
   preavisRoleId    String?   @map("preavis_role_id") @db.VarChar(20)
+  activeDevRoleId     String?   @map("active_dev_role_id") @db.VarChar(20)
+  activeDevChannelId  String?   @map("active_dev_channel_id") @db.VarChar(20)
+  immuneRoleId        String?   @map("immune_role_id") @db.VarChar(20)
   autoModeration   Boolean   @default(false) @map("auto_moderation")
   welcomeMessages  Boolean   @default(true) @map("welcome_messages")
   autoRoles        Boolean   @default(false) @map("auto_roles")
@@ -1514,4 +1517,20 @@ model JobOfferPosted {
   @@index([offerId])
   @@index([postedAt])
   @@map("job_offers_posted")
+}
+
+// ==================== Daily Message Tracking (Dev Actif) ====================
+
+model DailyMessageCount {
+  id        Int      @id @default(autoincrement())
+  guildId   String   @map("guild_id") @db.VarChar(20)
+  userId    String   @map("user_id") @db.VarChar(20)
+  date      DateTime @map("date") @db.Date
+  count     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([guildId, userId, date])
+  @@index([guildId, date])
+  @@index([userId, date])
+  @@map("daily_message_counts")
 }

@@ -695,6 +695,33 @@ const messageCreateEvent: BotEvent = {
         log.debug('Erreur tracking activite membre', { error: err });
       }
 
+      // Tracking quotidien pour le systeme Dev Actif
+      try {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        await db.client.dailyMessageCount.upsert({
+          where: {
+            guildId_userId_date: {
+              guildId: message.guild.id,
+              userId: message.author.id,
+              date: today,
+            },
+          },
+          update: {
+            count: { increment: 1 },
+          },
+          create: {
+            guildId: message.guild.id,
+            userId: message.author.id,
+            date: today,
+            count: 1,
+          },
+        });
+      } catch (err) {
+        log.debug('Erreur tracking quotidien Dev Actif', { error: err });
+      }
+
       try {
         // Retrait du role "Nouvel utilisateur" et/ou "En Preavis" au message
         const guildConfig = await db.client.guildConfig.findUnique({
