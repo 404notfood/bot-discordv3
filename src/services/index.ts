@@ -21,7 +21,7 @@ export { externalApiService, ExternalApiService } from './external-apis';
 export { runSession as runQuizSession, tickQuizScheduler } from './quiz-runner';
 
 // Cron challenges
-export { runChallengeAnnouncements } from './cron-challenges';
+export { challengeScheduler, ChallengeSchedulerService } from './cron-challenges';
 
 // Job offers
 export { jobOffersService, JobOffersService } from './job-offers';

@@ -95,7 +95,7 @@ async function getActiveChallenge(guildId: string, type: string): Promise<{
   const { start, end } = getBoundsForType(type);
 
   // Chercher d'abord dans les plans
-  const plan = await db.client.challengePlan.findFirst({
+  const plan = await (db.client as any).challengePlan.findFirst({
     where: {
       guildId,
       type: type as any,
@@ -173,7 +173,7 @@ async function handlePlanifier(interaction: ChatInputCommandInteraction) {
       end = bounds.end;
     }
 
-    await db.client.challengePlan.upsert({
+    await (db.client as any).challengePlan.upsert({
       where: {
         guildId_type_periodStart: {
           guildId,
@@ -230,7 +230,7 @@ async function handlePlanning(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply();
 
   const now = new Date();
-  const plans = await db.client.challengePlan.findMany({
+  const plans = await (db.client as any).challengePlan.findMany({
     where: {
       guildId,
       periodEnd: { gte: toDateOnly(now) },
@@ -247,7 +247,7 @@ async function handlePlanning(interaction: ChatInputCommandInteraction) {
   if (plans.length === 0) {
     embed.setDescription('Aucun challenge planifie.\nUn admin peut utiliser `/challenge planifier` pour en creer.');
   } else {
-    const lines = plans.map((p) => {
+    const lines = plans.map((p: any) => {
       const startTs = Math.floor(new Date(p.periodStart).getTime() / 1000);
       const endTs = Math.floor(new Date(p.periodEnd).getTime() / 1000);
       const isNow = new Date(p.periodStart) <= now && new Date(p.periodEnd) >= now;
@@ -301,12 +301,12 @@ async function handleConfig(interaction: ChatInputCommandInteraction) {
     await db.client.challengeConfig.upsert({
       where: { guildId },
       update: updateData,
-      create: createData,
+      create: createData as any,
     });
 
     // Creer aussi un plan pour la periode en cours
     const { start, end } = getBoundsForType(type);
-    await db.client.challengePlan.upsert({
+    await (db.client as any).challengePlan.upsert({
       where: {
         guildId_type_periodStart: {
           guildId,
@@ -704,7 +704,7 @@ async function handleRoles(interaction: ChatInputCommandInteraction) {
     await db.client.challengeConfig.upsert({
       where: { guildId },
       update: updateData,
-      create: createData,
+      create: createData as any,
     });
 
     const fields = [];
