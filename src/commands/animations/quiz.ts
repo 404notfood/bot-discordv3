@@ -130,20 +130,65 @@ export default {
       if (sub === 'rewards') {
         const winnerRole = interaction.options.getRole('winner_role');
         const durationDays = interaction.options.getInteger('duration_days');
-        const message = interaction.options.getString('message');
+        const rewardMessage = interaction.options.getString('message');
         const active = interaction.options.getBoolean('active');
 
-        if (winnerRole === null && durationDays === null && message === null && active === null) {
-          await interaction.reply({
-            content: 'Aucune configuration de récompense trouvée. (Fonctionnalité en développement)',
-            ephemeral: true,
-          });
+        if (winnerRole === null && durationDays === null && rewardMessage === null && active === null) {
+          // Show current config
+          const existing = await db.client.$queryRaw<any[]>`
+            SELECT * FROM quiz_rewards_configs WHERE guild_id = ${interaction.guildId} LIMIT 1
+          `.then((r: any) => r[0]);
+
+          if (!existing) {
+            await interaction.reply({
+              content: 'Aucune configuration de récompense trouvée. Utilisez `/quiz rewards winner_role:@Role` pour en créer une.',
+              flags: 64,
+            });
+          } else {
+            const embed = new EmbedBuilder()
+              .setColor(existing.is_active ? 0x2ecc71 : 0x95a5a6)
+              .setTitle('🏆 Configuration des récompenses Quiz')
+              .addFields(
+                { name: 'Role gagnant', value: existing.winner_role_id ? `<@&${existing.winner_role_id}>` : 'Non défini', inline: true },
+                { name: 'Durée', value: `${existing.duration_days} jours`, inline: true },
+                { name: 'Actif', value: existing.is_active ? '✅ Oui' : '❌ Non', inline: true },
+                { name: 'Message', value: existing.reward_message || '*Aucun message*', inline: false },
+              );
+            await interaction.reply({ embeds: [embed], flags: 64 });
+          }
           return;
         }
 
+        // Upsert config
+        const guildId = interaction.guildId!;
+        const existing = await db.client.$queryRaw<any[]>`
+          SELECT * FROM quiz_rewards_configs WHERE guild_id = ${guildId} LIMIT 1
+        `.then((r: any) => r[0]);
+
+        if (existing) {
+          // Update only provided fields
+          if (winnerRole !== null) {
+            await db.client.$executeRaw`UPDATE quiz_rewards_configs SET winner_role_id = ${winnerRole.id}, updated_at = NOW() WHERE guild_id = ${guildId}`;
+          }
+          if (durationDays !== null) {
+            await db.client.$executeRaw`UPDATE quiz_rewards_configs SET duration_days = ${durationDays}, updated_at = NOW() WHERE guild_id = ${guildId}`;
+          }
+          if (rewardMessage !== null) {
+            await db.client.$executeRaw`UPDATE quiz_rewards_configs SET reward_message = ${rewardMessage}, updated_at = NOW() WHERE guild_id = ${guildId}`;
+          }
+          if (active !== null) {
+            await db.client.$executeRaw`UPDATE quiz_rewards_configs SET is_active = ${active}, updated_at = NOW() WHERE guild_id = ${guildId}`;
+          }
+        } else {
+          await db.client.$executeRaw`
+            INSERT INTO quiz_rewards_configs (guild_id, winner_role_id, duration_days, reward_message, is_active, created_at, updated_at)
+            VALUES (${guildId}, ${winnerRole?.id || null}, ${durationDays || 5}, ${rewardMessage || 'Felicitations ! Vous etes le champion du quiz ! 🏆'}, ${active ?? true}, NOW(), NOW())
+          `;
+        }
+
         await interaction.reply({
-          content: 'Configuration des récompenses en cours de développement. Utilisez les rôles temporaires avec /give-temp-role.',
-          ephemeral: true,
+          content: '✅ Configuration des récompenses enregistrée !',
+          flags: 64,
         });
         return;
       }
