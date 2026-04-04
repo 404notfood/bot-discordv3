@@ -70,7 +70,7 @@ async function showCategories(interaction: ChatInputCommandInteraction): Promise
         dsc.color,
         dsc.sort_order
       FROM doc_super_categories dsc
-      WHERE dsc.is_active = 1
+      WHERE dsc.is_active = true
       ORDER BY dsc.sort_order
     `;
 
@@ -98,7 +98,7 @@ async function showCategories(interaction: ChatInputCommandInteraction): Promise
       const catRows = await db.client.$queryRaw<Pick<Category, 'name' | 'description' | 'icon'>[]>`
         SELECT name, description, icon
         FROM doc_categories
-        WHERE super_category_id = ${superCat.id} AND is_active = 1
+        WHERE super_category_id = ${superCat.id} AND is_active = true
         ORDER BY sort_order, name
       `;
 
@@ -205,7 +205,7 @@ async function showSuperCategory(interaction: ChatInputCommandInteraction, super
     if (!superCategoryName) {
       await interaction.followUp({
         content: 'Super-catégorie invalide.',
-        ephemeral: true,
+        flags: 64,
       });
       return;
     }
@@ -214,15 +214,15 @@ async function showSuperCategory(interaction: ChatInputCommandInteraction, super
       SELECT dsc.*,
              COUNT(dc.id) as category_count
       FROM doc_super_categories dsc
-      LEFT JOIN doc_categories dc ON dsc.id = dc.super_category_id AND dc.is_active = 1
-      WHERE dsc.name = ${superCategoryName} AND dsc.is_active = 1
+      LEFT JOIN doc_categories dc ON dsc.id = dc.super_category_id AND dc.is_active = true
+      WHERE dsc.name = ${superCategoryName} AND dsc.is_active = true
       GROUP BY dsc.id
     `;
 
     if (superCategoryData.length === 0) {
       await interaction.followUp({
         content: 'Super-catégorie non trouvée.',
-        ephemeral: true,
+        flags: 64,
       });
       return;
     }
@@ -233,8 +233,8 @@ async function showSuperCategory(interaction: ChatInputCommandInteraction, super
       SELECT dc.*,
              COUNT(dr.id) as resource_count
       FROM doc_categories dc
-      LEFT JOIN doc_resources dr ON dc.id = dr.category_id AND dr.is_active = 1
-      WHERE dc.super_category_id = ${superCatData.id} AND dc.is_active = 1
+      LEFT JOIN doc_resources dr ON dc.id = dr.category_id AND dr.is_active = true
+      WHERE dc.super_category_id = ${superCatData.id} AND dc.is_active = true
       GROUP BY dc.id
       ORDER BY dc.sort_order, dc.name
     `;
@@ -287,13 +287,13 @@ async function showTechnology(interaction: ChatInputCommandInteraction, techName
       SELECT dc.*, dsc.name as super_category_name, dsc.icon as super_category_icon, dsc.color as super_category_color
       FROM doc_categories dc
       LEFT JOIN doc_super_categories dsc ON dc.super_category_id = dsc.id
-      WHERE LOWER(dc.name) = ${techName.toLowerCase()} AND dc.is_active = 1
+      WHERE LOWER(dc.name) = ${techName.toLowerCase()} AND dc.is_active = true
     `;
 
     if (categoryData.length === 0) {
       await interaction.followUp({
         content: `Technologie "${techName}" non trouvée.`,
-        ephemeral: true,
+        flags: 64,
       });
       return;
     }
@@ -303,7 +303,7 @@ async function showTechnology(interaction: ChatInputCommandInteraction, techName
     const resources = await db.client.$queryRaw<Resource[]>`
       SELECT dr.*
       FROM doc_resources dr
-      WHERE dr.category_id = ${category.id} AND dr.is_active = 1
+      WHERE dr.category_id = ${category.id} AND dr.is_active = true
       ORDER BY dr.created_at DESC
     `;
 
@@ -384,7 +384,7 @@ async function handleAutocomplete(interaction: AutocompleteInteraction): Promise
           FROM doc_categories dc
           LEFT JOIN doc_super_categories dsc ON dc.super_category_id = dsc.id
           WHERE dsc.name = ${superCategoryName}
-            AND dc.is_active = 1
+            AND dc.is_active = true
             AND dc.name LIKE ${`%${focusedValue}%`}
           ORDER BY dc.name
           LIMIT 25
@@ -396,7 +396,7 @@ async function handleAutocomplete(interaction: AutocompleteInteraction): Promise
       catResults = await db.client.$queryRaw<{ name: string }[]>`
         SELECT name
         FROM doc_categories
-        WHERE is_active = 1
+        WHERE is_active = true
           AND name LIKE ${`%${focusedValue}%`}
         ORDER BY name
         LIMIT 25
@@ -416,7 +416,7 @@ async function handleAutocomplete(interaction: AutocompleteInteraction): Promise
       const fallbackCategories = await db.client.$queryRaw<{ name: string }[]>`
         SELECT name
         FROM doc_categories
-        WHERE is_active = 1
+        WHERE is_active = true
         ORDER BY name
         LIMIT 10
       `;
@@ -487,7 +487,7 @@ export default {
       log.error('Erreur commande docs', { error });
       await interaction.followUp({
         content: 'Erreur lors de l\'accès à la documentation.',
-        ephemeral: true,
+        flags: 64,
       });
     }
   },

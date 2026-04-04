@@ -67,8 +67,7 @@ const categories: Record<string, CategoryInfo> = {
     commands: [
       '`/quiz` - Quiz développeur configurable (thèmes, programmation)',
       '`/challenge` - Système de défis hebdomadaires/mensuels',
-      '`/sql-clinic` - Exercices pratiques SQL avec datasets',
-      '`/sql-challenge` - SQL Challenge en 7 semaines',
+      '`/sql` - Entraînement et défis SQL (train, solve, leaderboard, schema)',
       '`/github-streak` - Suivi des contributions GitHub',
       '`/daily-dev-tip` - Conseil de développement quotidien',
     ],
@@ -152,7 +151,7 @@ async function showAllCategories(interaction: ChatInputCommandInteraction): Prom
       },
       {
         name: '🎯 **Animations** (6 commandes)',
-        value: '`/quiz` `/challenge` `/sql-clinic` `/github-streak`\n*Quiz, défis, SQL clinic, conseils dev*',
+        value: '`/quiz` `/challenge` `/sql` `/github-streak`\n*Quiz, défis, SQL training, conseils dev*',
         inline: true,
       },
       {

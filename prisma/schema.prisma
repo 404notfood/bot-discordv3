@@ -1233,9 +1233,11 @@ model SqlClinicTask {
   title          String           @db.VarChar(255)
   description    String?          @db.Text
   statement      String           @db.Text
+  difficulty     String           @default("beginner") @db.VarChar(20)
   expectedSql    String           @map("expected_sql") @db.Text
   expectedResult Json             @map("expected_result")
   points         Int              @default(1)
+  sortOrder      Int              @default(0) @map("sort_order")
   createdAt      DateTime?        @map("created_at") @db.Timestamptz
   updatedAt      DateTime?        @map("updated_at") @db.Timestamptz
   dataset        SqlClinicDataset @relation(fields: [datasetId], references: [id])
