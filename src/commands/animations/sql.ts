@@ -447,6 +447,170 @@ async function handleChallengeStop(interaction: ChatInputCommandInteraction): Pr
   await interaction.reply({ content: '✅ SQL Challenge arrêté.', flags: 64 });
 }
 
+/** /sql challenge resend — resend schema + current question DM to all participants */
+async function handleChallengeResend(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { PermissionsManager } = await import('../../services/permissions');
+  if (!(await PermissionsManager.requireAdmin(interaction))) return;
+
+  const reset = interaction.options.getBoolean('reset') ?? false;
+
+  await interaction.deferReply({ flags: 64 });
+
+  // Active session for this guild
+  const session = await db.client.$queryRaw<Array<any>>`
+    SELECT s.*, d.slug as dataset_slug, d.name as dataset_name,
+           d.description as dataset_description, d.schema_sql
+    FROM sql_challenge_sessions s
+    JOIN sql_clinic_datasets d ON d.id = s.dataset_id
+    WHERE s.guild_id = ${interaction.guildId} AND s.status = 'active'
+    ORDER BY s.id DESC LIMIT 1
+  `.then((r: any) => r[0]);
+
+  if (!session) {
+    await interaction.editReply({ content: '❌ Aucun SQL Challenge actif.' });
+    return;
+  }
+
+  // Optional reset: put everyone back to question 1, clear responses
+  if (reset) {
+    await db.client.$executeRaw`
+      DELETE FROM sql_challenge_responses
+      WHERE participant_id IN (
+        SELECT id FROM sql_challenge_participants WHERE session_id = ${session.id}
+      )
+    `;
+    await db.client.$executeRaw`
+      UPDATE sql_challenge_participants
+      SET current_question = 1, total_points = 0, hints_used = 0,
+          is_finished = false, last_activity_at = NOW(), updated_at = NOW()
+      WHERE session_id = ${session.id}
+    `;
+  }
+
+  // Load schema once
+  let schemaSql = '';
+  try {
+    schemaSql = loadSchemaSql({ slug: session.dataset_slug, schema_sql: session.schema_sql });
+  } catch (err) {
+    log.error('Resend: schema load error', { err });
+  }
+
+  // Build schema description (CREATE TABLE summaries)
+  function buildSchemaDescription(sql: string): string {
+    const tableRegex = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\(/gi;
+    const tables: string[] = [];
+    let match;
+    while ((match = tableRegex.exec(sql)) !== null) {
+      const tableName = match[1];
+      let depth = 1;
+      let i = match.index + match[0].length;
+      while (i < sql.length && depth > 0) {
+        if (sql[i] === '(') depth++;
+        if (sql[i] === ')') depth--;
+        i++;
+      }
+      const body = sql.substring(match.index + match[0].length, i - 1);
+      const parts: string[] = [];
+      let current = '';
+      let pd = 0;
+      for (const ch of body) {
+        if (ch === '(') pd++;
+        if (ch === ')') pd--;
+        if (ch === ',' && pd === 0) { parts.push(current.trim()); current = ''; }
+        else current += ch;
+      }
+      if (current.trim()) parts.push(current.trim());
+      const cols = parts
+        .filter((c) => !c.startsWith('FOREIGN') && !c.startsWith('PRIMARY') && !c.startsWith('CHECK') && !c.startsWith('UNIQUE') && c.length > 0)
+        .map((c) => { const tokens = c.split(/\s+/); return `  ${tokens[0]} ${tokens[1] || ''}`; })
+        .join('\n');
+      tables.push(`**${tableName}**\n\`\`\`\n${cols}\n\`\`\``);
+    }
+    return tables.join('\n\n');
+  }
+
+  const schemaDesc = schemaSql ? buildSchemaDescription(schemaSql) : '*Schema non disponible*';
+
+  // Fetch participants
+  const participants = await db.client.$queryRaw<Array<any>>`
+    SELECT id, user_discord_id, username, current_question, is_finished
+    FROM sql_challenge_participants
+    WHERE session_id = ${session.id}
+  `;
+
+  if (participants.length === 0) {
+    await interaction.editReply({ content: '❌ Aucun participant inscrit.' });
+    return;
+  }
+
+  // Load all task IDs for the session
+  const taskIds: number[] = JSON.parse(session.questions_json);
+  const totalQuestions = taskIds.length;
+
+  let success = 0;
+  let failed = 0;
+
+  for (const p of participants) {
+    try {
+      const user = await interaction.client.users.fetch(p.user_discord_id);
+
+      const instructionsMessage = `**SQL Challenge — ${session.dataset_name || session.title}** *(renvoi)*
+
+${session.dataset_description || ''}
+
+**Schema des tables :**
+${schemaDesc}
+
+**Commandes MP disponibles :**
+- \`!reponse SELECT ...\` — Soumettre ta requete SQL
+- \`!indice\` — Demander un indice (-2 points)
+- \`!sql-progress\` — Voir ta progression actuelle`;
+
+      await user.send({ content: instructionsMessage });
+
+      // Send current question
+      const qNum = p.is_finished ? totalQuestions : (p.current_question || 1);
+      const taskId = taskIds[qNum - 1];
+      if (taskId) {
+        const taskRows = await db.client.$queryRaw<Array<any>>`
+          SELECT id, slug, title, description, difficulty, points, hint
+          FROM sql_clinic_tasks WHERE id = ${taskId} LIMIT 1
+        `;
+        const task = taskRows[0];
+        if (task) {
+          const diffLabel = task.difficulty === 'beginner' ? '🟢 Debutant'
+            : task.difficulty === 'intermediate' ? '🟡 Intermediaire'
+            : '🔴 Avance';
+
+          const questionMessage = `**Question ${qNum}/${totalQuestions}** — ${session.title || 'SQL Challenge'}
+
+**${task.title}** ${diffLabel}
+
+**Enonce :** ${task.description}
+
+**Commandes (MP uniquement) :**
+- \`!reponse SELECT ...\` — Soumettre ta requete SQL
+- \`!indice\` — Demander un indice (-2 points)
+- \`!sql-progress\` — Voir ta progression
+
+**${task.points} points par question** — **Penalite indices :** -2 points par indice`;
+
+          await user.send({ content: questionMessage });
+        }
+      }
+
+      success++;
+    } catch (err) {
+      log.error('Resend DM failed', { userId: p.user_discord_id, err });
+      failed++;
+    }
+  }
+
+  await interaction.editReply({
+    content: `✅ Renvoi termine : **${success}** envoye(s), **${failed}** echec(s)${reset ? ' — progression reinitialisee.' : '.'}`,
+  });
+}
+
 /** /sql challenge stats — show challenge leaderboard */
 async function handleChallengeStats(interaction: ChatInputCommandInteraction): Promise<void> {
   const session = await db.client.$queryRaw<Array<any>>`
@@ -526,6 +690,17 @@ export default {
           sub.setName('stop').setDescription('⏹️ Arrêter le challenge actif (admin)')
         )
         .addSubcommand((sub) =>
+          sub
+            .setName('resend')
+            .setDescription('📨 Renvoyer le schéma + question courante en MP à tous les inscrits (admin)')
+            .addBooleanOption((o) =>
+              o
+                .setName('reset')
+                .setDescription('Réinitialiser la progression de tous les participants à la question 1')
+                .setRequired(false)
+            )
+        )
+        .addSubcommand((sub) =>
           sub.setName('stats').setDescription('📊 Classement du challenge actif')
         )
     )
@@ -593,6 +768,7 @@ export default {
         switch (sub) {
           case 'start': await handleChallengeStart(interaction); break;
           case 'stop': await handleChallengeStop(interaction); break;
+          case 'resend': await handleChallengeResend(interaction); break;
           case 'stats': await handleChallengeStats(interaction); break;
         }
         return;
