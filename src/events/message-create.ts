@@ -81,11 +81,12 @@ async function getRunningSession(guildId: string, channelId: string) {
 /** Load schema SQL for a dataset (from DB field or file) */
 function loadSchemaSql(dataset: any): string {
   if (dataset.schema_sql) return dataset.schema_sql;
-  const filePath = path.join(process.cwd(), 'prisma/datasets', `${dataset.slug}.sql`);
+  const slug = dataset.slug || dataset.dataset_slug;
+  const filePath = path.join(process.cwd(), 'prisma/datasets', `${slug}.sql`);
   if (fs.existsSync(filePath)) {
     return fs.readFileSync(filePath, 'utf-8');
   }
-  throw new Error(`Schema SQL introuvable pour le dataset "${dataset.slug}"`);
+  throw new Error(`Schema SQL introuvable pour le dataset "${slug}"`);
 }
 
 /** Parse CREATE TABLE statements from a schema SQL string and build a readable summary */
